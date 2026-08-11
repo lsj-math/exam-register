@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SNT 서술형 채점</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Pretendard',-apple-system,'Malgun Gothic',sans-serif;background:#F7F7F5}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect } = React;
+
+const SB = "https://xjycvsnmkbbruhqhmory.supabase.co";
+const SK = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhqeWN2c25ta2JicnVocWhtb3J5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU5MTkxMzMsImV4cCI6MjEwMTQ5NTEzM30.lebGx2ilI5lhfD9MV8yQa1GqVCjIBN8DS1oiqJnTyec";
+const H = {"apikey":SK,"Authorization":`Bearer ${SK}`,"Content-Type":"application/json"};
+
+async function sbGet(path) {
+  const r = await fetch(`${SB}/rest/v1/${path}`, {headers:H});
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+async function sbUpsert(table, body) {
+  const r = await fetch(`${SB}/rest/v1/${table}`, {
+    method:"POST", headers:{...H,"Prefer":"return=representation,resolution=merge-duplicates"},
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+
+function App() {
+  const [step, setStep] = useState("select");
+  const [exams, setExams] = useState([]);
+  const [exam, setExam] = useState(null);
+  const [students, setStudents] = useState([]);
+  const [essayQs, setEssayQs] = useState([]);
+  const [allQs, setAllQs] = useState([]);
+  const [scores, setScores] = useState({}); // {studentId-questionNo: number}
+  const [openStudent, setOpenStudent] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+  const [toast, setToast] = useState("");
+  const [omrResults, setOmrResults] = useState({});
+
+  useEffect(() => {
+    sbGet("exams?status=eq.approved&order=created_at.desc").then(setExams).catch(e => setError(e.message));
+  }, []);
+
+  const selectExam = async (ex) => {
+    setExam(ex); setError(null);
+    try {
+      const qs = await sbGet(`exam_questions?exam_id=eq.${ex.id}&order=question_no`);
+      setAllQs(qs);
+      setEssayQs(qs.filter(q => q.question_type === "서술형"));
+
+      const sts = await sbGet(`students?class_name=eq.${encodeURIComponent(ex.class_name)}&order=name`);
+      setStudents(sts);
+
+      // 기존 채점 데이터
+      const existing = await sbGet(`exam_subjective?exam_id=eq.${ex.id}`);
+      const scoreMap = {};
+      existing.forEach(g => {
+        if (g.partial_score !== null && g.partial_score !== undefined) {
+          scoreMap[`${g.student_id}-${g.question_no}`] = g.partial_score;
+        }
+      });
+      setScores(scoreMap);
+
+      // 기존 exam_results
+      const results = await sbGet(`exam_results?exam_id=eq.${ex.id}`);
+      const rMap = {};
+      results.forEach(r => { rMap[r.student_id] = r; });
+      setOmrResults(rMap);
+
+      setStep("grade");
+    } catch(e) { setError(e.message); }
+  };
+
+  const setScore = (studentId, questionNo, value) => {
+    const key = `${studentId}-${questionNo}`;
+    setScores(prev => ({...prev, [key]: value}));
+  };
+
+  // 점수 버튼 (0, 1, 2, ... max)
+  const ScoreButtons = ({studentId, q}) => {
+    const key = `${studentId}-${q.question_no}`;
+    const current = scores[key];
+    const max = Number(q.score);
+    // 0~max 정수 버튼 + 0.5 단위도 지원
+    const steps = [];
+    for (let i = 0; i <= max; i++) steps.push(i);
+
+    return (
+      <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+        {steps.map(v => (
+          <button key={v} onClick={() => setScore(studentId, q.question_no, v)}
+            style={{
+              minWidth:34, height:32, borderRadius:7, border:"none", cursor:"pointer",
+              fontSize:13, fontWeight:700,
+              background: current === v ? (v === 0 ? "#EF4444" : v === max ? "#22C55E" : "#3B82F6") : "#F0F0F0",
+              color: current === v ? "white" : "#888",
+            }}>
+            {v}
+          </button>
+        ))}
+        {/* 0.5 단위 직접 입력 */}
+        <div style={{display:"flex",alignItems:"center",gap:3,marginLeft:4}}>
+          <input
+            type="number" step="0.5" min="0" max={max}
+            value={current !== undefined && !steps.includes(current) ? current : ""}
+            placeholder="직접"
+            onChange={e => {
+              const val = parseFloat(e.target.value);
+              if (!isNaN(val) && val >= 0 && val <= max) setScore(studentId, q.question_no, val);
+            }}
+            style={{
+              width:50, height:32, borderRadius:7, border:"1.5px solid #DDD",
+              textAlign:"center", fontSize:13, outline:"none",
+            }}
+          />
+        </div>
+      </div>
+    );
+  };
+
+  const saveStudent = async (student) => {
+    setSaving(true); setToast("");
+    try {
+      // 1. exam_subjective 저장
+      const rows = essayQs.map(q => {
+        const key = `${student.id}-${q.question_no}`;
+        const ps = scores[key];
+        const maxScore = Number(q.score);
+        return {
+          exam_id: exam.id,
+          student_id: student.id,
+          question_no: q.question_no,
+          is_correct: ps !== undefined ? (ps >= maxScore) : null,
+          partial_score: ps !== undefined ? ps : null,
+          graded_at: new Date().toISOString(),
+        };
+      });
+      await sbUpsert("exam_subjective", rows);
+
+      // 2. exam_results 업데이트 — 오답 + 총점 계산
+      const existingResult = omrResults[student.id];
+      const omrWrong = existingResult?.wrong_questions || [];
+
+      // OMR 오답 중 서술형 제외
+      const nonEssayWrong = omrWrong.filter(w =>
+        !essayQs.some(q => q.question_no === w)
+      );
+
+      // 서술형에서 0점인 문항만 오답 처리
+      const essayWrong = essayQs
+        .filter(q => scores[`${student.id}-${q.question_no}`] === 0)
+        .map(q => q.question_no);
+
+      const allWrong = [...new Set([...nonEssayWrong, ...essayWrong])].sort((a,b) => a-b);
+
+      // 총점 계산: 정답 문항 배점 합 + 서술형 부분점수
+      let total = 0;
+      allQs.forEach(q => {
+        if (q.question_type === "서술형") {
+          // 서술형: 부분 점수 사용
+          const ps = scores[`${student.id}-${q.question_no}`];
+          total += (ps !== undefined ? ps : 0);
+        } else {
+          // 객관식/단답형: 오답 아니면 만점
+          if (!allWrong.includes(q.question_no)) {
+            total += Number(q.score);
+          }
+        }
+      });
+
+      await sbUpsert("exam_results", [{
+        exam_id: exam.id,
+        student_id: student.id,
+        wrong_questions: allWrong,
+        total_score: Math.round(total * 10) / 10,
+        sub_graded: true,
+        omr_graded: existingResult?.omr_graded || false,
+        graded_at: new Date().toISOString(),
+      }]);
+
+      setToast(`${student.name} 저장 완료 (${Math.round(total * 10) / 10}점)`);
+      setTimeout(() => setToast(""), 2500);
+    } catch(e) { setError(`저장 실패: ${e.message}`); }
+    finally { setSaving(false); }
+  };
+
+  const saveAll = async () => {
+    setSaving(true); setError(null);
+    for (const s of students) await saveStudent(s);
+    setSaving(false); setStep("done");
+  };
+
+  const getProgress = (sid) => {
+    const total = essayQs.length;
+    const done = essayQs.filter(q => scores[`${sid}-${q.question_no}`] !== undefined).length;
+    return {done, total};
+  };
+
+  const getStudentTotal = (sid) => {
+    let t = 0;
+    essayQs.forEach(q => {
+      const ps = scores[`${sid}-${q.question_no}`];
+      t += (ps !== undefined ? ps : 0);
+    });
+    return Math.round(t * 10) / 10;
+  };
+
+  const essayMaxTotal = essayQs.reduce((s,q) => s + Number(q.score), 0);
+
+  // ── Select ──
+  if (step === "select") return (
+    <div style={{minHeight:"100vh",padding:20,maxWidth:600,margin:"0 auto"}}>
+      <div style={{background:"linear-gradient(135deg,#1A2F4A,#2B4A6F)",borderRadius:20,padding:28,color:"white",marginBottom:20,textAlign:"center"}}>
+        <div style={{fontSize:10,letterSpacing:2,opacity:0.5,marginBottom:4}}>TA GRADING</div>
+        <h1 style={{fontSize:22,fontWeight:800,margin:0}}>서술형 채점</h1>
+        <p style={{fontSize:13,opacity:0.6,marginTop:4}}>부분 점수 입력</p>
+      </div>
+      {error && <div style={{fontSize:13,color:"#DC2626",background:"#FEF2F2",padding:"10px 14px",borderRadius:10,marginBottom:16}}>{error}</div>}
+      {exams.length === 0 ? (
+        <div style={{background:"white",borderRadius:16,padding:"40px 20px",textAlign:"center",color:"#999",fontSize:14}}>등록된 시험이 없습니다</div>
+      ) : (
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+          {exams.map(ex => (
+            <button key={ex.id} onClick={() => selectExam(ex)}
+              style={{background:"white",borderRadius:14,padding:"18px 20px",border:"1.5px solid #EAEAEA",cursor:"pointer",textAlign:"left",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div>
+                <div style={{fontSize:16,fontWeight:700,color:"#1A2F4A"}}>{ex.title}</div>
+                <div style={{fontSize:12,color:"#999",marginTop:3}}>{ex.school} · {ex.class_name}</div>
+              </div>
+              <div style={{fontSize:24,color:"#CCC"}}>→</div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
+  // ── Done ──
+  if (step === "done") return (
+    <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+      <div style={{background:"white",borderRadius:24,padding:"48px 40px",maxWidth:400,width:"100%",textAlign:"center",boxShadow:"0 2px 16px rgba(0,0,0,0.06)"}}>
+        <div style={{fontSize:48,marginBottom:12}}>✅</div>
+        <h2 style={{fontSize:20,fontWeight:800,color:"#1A2F4A",marginBottom:6}}>채점 완료</h2>
+        <p style={{fontSize:14,color:"#888",marginBottom:28}}>{exam?.title} · {students.length}명</p>
+        <button onClick={() => {setStep("select");setExam(null);setStudents([]);setScores({});}}
+          style={{padding:"12px 28px",fontSize:14,fontWeight:600,background:"#2B4A6F",color:"white",border:"none",borderRadius:12,cursor:"pointer"}}>다른 시험 채점</button>
+      </div>
+    </div>
+  );
+
+  // ── Grade ──
+  return (
+    <div style={{minHeight:"100vh",padding:"16px 16px 80px",maxWidth:700,margin:"0 auto"}}>
+      {/* 헤더 */}
+      <div style={{background:"linear-gradient(135deg,#1A2F4A,#2B4A6F)",borderRadius:18,padding:"20px 24px",color:"white",marginBottom:16}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <div>
+            <div style={{fontSize:10,letterSpacing:2,opacity:0.5}}>서술형 채점</div>
+            <h1 style={{fontSize:20,fontWeight:800,margin:"4px 0 0"}}>{exam.title}</h1>
+            <div style={{fontSize:12,opacity:0.6,marginTop:2}}>{exam.school} · {exam.class_name}</div>
+          </div>
+          <button onClick={() => {setStep("select");setExam(null);}}
+            style={{padding:"8px 14px",fontSize:12,background:"rgba(255,255,255,0.15)",color:"white",border:"none",borderRadius:8,cursor:"pointer"}}>← 목록</button>
+        </div>
+      </div>
+
+      {error && <div style={{fontSize:13,color:"#DC2626",background:"#FEF2F2",padding:"10px 14px",borderRadius:10,marginBottom:12}}>{error}</div>}
+      {toast && <div style={{fontSize:13,color:"#16A34A",background:"#F0FDF4",padding:"10px 14px",borderRadius:10,marginBottom:12,textAlign:"center",fontWeight:600}}>{toast}</div>}
+
+      {/* 채점 대상 */}
+      <div style={{background:"white",borderRadius:14,padding:"14px 18px",marginBottom:12,boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}>
+        <div style={{fontSize:11,color:"#999",fontWeight:600,marginBottom:6}}>채점 대상 (서술형)</div>
+        <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+          {essayQs.map(q => (
+            <span key={q.question_no} style={{fontSize:12,padding:"4px 10px",borderRadius:8,fontWeight:600,background:"#FCE4EC",color:"#C62828"}}>
+              {q.question_no}번 · {q.score}점 · 정답: {q.answer || "—"}
+            </span>
+          ))}
+          <span style={{fontSize:12,color:"#999",padding:"4px 0"}}>총 {essayMaxTotal}점</span>
+        </div>
+      </div>
+
+      {essayQs.length === 0 ? (
+        <div style={{background:"white",borderRadius:14,padding:"40px",textAlign:"center",color:"#999"}}>이 시험에 서술형 문항이 없습니다</div>
+      ) : students.length === 0 ? (
+        <div style={{background:"white",borderRadius:14,padding:"40px",textAlign:"center",color:"#999"}}>해당 반에 학생이 없습니다</div>
+      ) : (
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+          {students.map(student => {
+            const prog = getProgress(student.id);
+            const isOpen = openStudent === student.id;
+            const allDone = prog.done === prog.total;
+            const essayTotal = getStudentTotal(student.id);
+
+            return (
+              <div key={student.id} style={{background:"white",borderRadius:14,overflow:"hidden",boxShadow:"0 1px 4px rgba(0,0,0,0.04)",border:allDone?"1.5px solid #22C55E":"1.5px solid #EAEAEA"}}>
+                <div onClick={() => setOpenStudent(isOpen ? null : student.id)}
+                  style={{padding:"14px 18px",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:12}}>
+                    <div style={{
+                      width:34,height:34,borderRadius:9,
+                      background:allDone?"#22C55E":"#F0F0F0",
+                      color:allDone?"white":"#999",
+                      display:"flex",alignItems:"center",justifyContent:"center",
+                      fontSize:13,fontWeight:800,
+                    }}>{allDone ? "✓" : `${prog.done}`}</div>
+                    <div>
+                      <div style={{fontSize:15,fontWeight:700,color:"#1A2F4A"}}>{student.name}</div>
+                      <div style={{fontSize:11,color:"#AAA"}}>{prog.done}/{prog.total} 채점 · 서술형 {essayTotal}/{essayMaxTotal}점</div>
+                    </div>
+                  </div>
+                  <div style={{display:"flex",alignItems:"center",gap:8}}>
+                    {allDone && <button onClick={e => {e.stopPropagation();saveStudent(student)}} disabled={saving}
+                      style={{padding:"6px 14px",fontSize:12,fontWeight:600,background:"#2B4A6F",color:"white",border:"none",borderRadius:8,cursor:"pointer"}}>저장</button>}
+                    <span style={{fontSize:20,color:"#CCC",transform:isOpen?"rotate(90deg)":"none",transition:"transform 0.2s"}}>›</span>
+                  </div>
+                </div>
+
+                {isOpen && (
+                  <div style={{padding:"0 18px 16px",borderTop:"1px solid #F5F5F5"}}>
+                    {essayQs.map(q => {
+                      const key = `${student.id}-${q.question_no}`;
+                      const current = scores[key];
+                      const max = Number(q.score);
+                      return (
+                        <div key={q.question_no} style={{
+                          marginTop:12, padding:"14px 16px",borderRadius:12,
+                          background: current !== undefined ? (current === 0 ? "#FEF2F2" : current >= max ? "#F0FDF4" : "#EFF6FF") : "#FAFAFA",
+                        }}>
+                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                            <div style={{display:"flex",alignItems:"center",gap:8}}>
+                              <div style={{width:28,height:28,borderRadius:7,background:"#FCE4EC",color:"#C62828",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:800}}>{q.question_no}</div>
+                              <div>
+                                <div style={{fontSize:13,fontWeight:600,color:"#333"}}>{q.topic}</div>
+                                <div style={{fontSize:11,color:"#AAA"}}>배점 {q.score}점 · 정답: {q.answer || "—"}</div>
+                              </div>
+                            </div>
+                            {current !== undefined && (
+                              <div style={{fontSize:18,fontWeight:800,color:current===0?"#EF4444":current>=max?"#22C55E":"#3B82F6"}}>
+                                {current}<span style={{fontSize:12,color:"#999"}}>/{max}</span>
+                              </div>
+                            )}
+                          </div>
+                          <ScoreButtons studentId={student.id} q={q} />
+                        </div>
+                      );
+                    })}
+                    <button onClick={() => saveStudent(student)} disabled={saving}
+                      style={{width:"100%",marginTop:14,padding:"12px",fontSize:14,fontWeight:700,background:saving?"#94A3B8":"#2B4A6F",color:"white",border:"none",borderRadius:10,cursor:saving?"default":"pointer"}}>
+                      {saving ? "저장 중..." : `${student.name} 채점 저장`}
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {students.length > 0 && essayQs.length > 0 && (
+        <div style={{position:"fixed",bottom:0,left:0,right:0,background:"white",borderTop:"1px solid #EAEAEA",padding:"12px 20px",display:"flex",justifyContent:"center"}}>
+          <button onClick={saveAll} disabled={saving}
+            style={{padding:"14px 40px",fontSize:15,fontWeight:700,background:saving?"#94A3B8":"#2B4A6F",color:"white",border:"none",borderRadius:12,cursor:saving?"default":"pointer",maxWidth:400,width:"100%"}}>
+            {saving ? "저장 중..." : `전체 저장 (${students.length}명)`}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.render(React.createElement(App), document.getElementById("root"));
+</script>
+</body>
+</html>
