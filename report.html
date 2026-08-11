@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SNT 성적 분석 리포트</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Pretendard',-apple-system,'Malgun Gothic',sans-serif;background:#F5F2ED}
+
+.page-padding { padding: 28px 28px 20px; }
+
+/* 🎨 점수 배너 및 상단 레이아웃 */
+.title-section { margin-bottom: 20px; }
+.title-section h1 { font-size: 28px; font-weight: 800; color: #2D2218; letter-spacing: -0.5px; word-break: keep-all; line-height: 1.25; }
+.title-section h2 { font-size: 22px; font-weight: 700; color: #2D2218; margin-top: 6px; word-break: keep-all; }
+.title-section .report-label { font-size: 16px; font-weight: 700; color: #B75D40; margin-top: 10px; }
+.title-section .student-label { font-size: 14px; color: #8C7B6B; margin-top: 14px; }
+
+.score-banner {
+  background: #B75D40; 
+  border-radius: 12px;
+  padding: 22px 30px;
+  color: white;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+.score-banner-val { font-size: 46px; font-weight: 900; line-height: 1; }
+.score-banner-info { text-align: right; }
+.score-banner-sub { font-size: 14px; font-weight: 700; opacity: 0.9; margin-bottom: 6px; }
+.score-banner-structure { font-size: 12px; font-weight: 500; opacity: 0.75; letter-spacing: 0.5px; }
+
+/* 📊 3열 요약 카드 */
+.grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin-bottom: 24px; }
+.grid-3-card { background: white; border-radius: 12px; padding: 18px 12px; text-align: center; border: 1px solid #E8DDD0; display: flex; flex-direction: column; justify-content: center; }
+.grid-3-label { font-size: 12px; color: #B75D40; font-weight: 700; margin-bottom: 8px; }
+.grid-3-val { font-size: 24px; font-weight: 800; color: #2D2218; word-break: keep-all; }
+.grid-3-sub { font-size: 11px; color: #8C7B6B; margin-top: 6px; }
+
+/* 하단 2열 차트 */
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 24px; }
+.donut-layout { display: flex; align-items: center; gap: 24px; padding-left: 10px; } 
+
+/* 📱 모바일 화면 (600px 이하) 최적화 */
+@media (max-width: 600px) {
+  .page-padding { padding: 16px 14px 20px !important; }
+  
+  .title-section h1 { font-size: 22px !important; }
+  .title-section h2 { font-size: 18px !important; }
+  .title-section .report-label { font-size: 14px !important; margin-top: 8px !important; }
+  
+  .score-banner { padding: 16px 20px !important; }
+  .score-banner-val { font-size: 36px !important; }
+  .score-banner-sub { font-size: 12px !important; margin-bottom: 4px !important; }
+  .score-banner-structure { font-size: 10px !important; }
+  
+  .grid-3 { gap: 8px !important; }
+  .grid-3-card { padding: 14px 4px !important; }
+  .grid-3-label { font-size: 10px !important; margin-bottom: 6px !important; } 
+  .grid-3-val { font-size: 16px !important; }
+  .grid-3-sub { font-size: 9px !important; letter-spacing: -0.5px; }
+  
+  .grid-2 { grid-template-columns: 1fr !important; gap: 16px !important; }
+  .donut-layout { justify-content: center; padding-left: 0; } 
+}
+
+@media print{
+  @page{size:A4 portrait;margin:10mm}
+  html,body{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;background:white!important}
+  .no-print{display:none!important}
+  .print-only{display:block!important}
+  .report-wrap{max-width:100%!important;box-shadow:none!important}
+  .page-break{break-before:page;page-break-before:always}
+  .no-break{break-inside:avoid;page-break-inside:avoid}
+}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const {useState,useEffect}=React;
+const SB="https://xjycvsnmkbbruhqhmory.supabase.co";
+const SK="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhqeWN2c25ta2JicnVocWhtb3J5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU5MTkxMzMsImV4cCI6MjEwMTQ5NTEzM30.lebGx2ilI5lhfD9MV8yQa1GqVCjIBN8DS1oiqJnTyec";
+const H={"apikey":SK,"Authorization":`Bearer ${SK}`,"Content-Type":"application/json"};
+async function sbGet(p){const r=await fetch(`${SB}/rest/v1/${p}`,{headers:H});if(!r.ok)throw new Error(await r.text());return r.json()}
+
+const C={primary:"#8B3A2F",accent:"#B75D40",warm:"#D4956A",light:"#FAF6F1",text:"#2D2218",sub:"#8C7B6B",border:"#E8DDD0"};
+const diffColors={"하":{bg:"#E8F5E9",text:"#2E7D32"},"중하":{bg:"#E3F2FD",text:"#1565C0"},"중":{bg:"#FFF8E1",text:"#F57F17"},"중상":{bg:"#FFF3E0",text:"#E65100"},"상":{bg:"#FCE4EC",text:"#C62828"},"최상":{bg:"#F3E5F5",text:"#6A1B9A"}};
+const diffConf={"하":{color:"#D4956A"},"중하":{color:"#C0813A"},"중":{color:"#B06830"},"중상":{color:"#9A5028"},"상":{color:"#8B3A2F"},"최상":{color:"#6B1A10"}};
+
+function RadarChart({labels,values,avgValues,size=340}){
+  const cx=size/2, cy=size/2, maxR=100; 
+  const n=labels.length;
+  const angleStep=(2*Math.PI)/n;
+  const getPoint=(i,val)=>{
+    const angle=-Math.PI/2+i*angleStep;
+    const r=(val/100)*maxR;
+    return[cx+r*Math.cos(angle),cy+r*Math.sin(angle)];
+  };
+  const levels=[20,40,60,80,100];
+  return(
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{maxWidth:"100%", height:"auto", display:"block", margin:"0 auto"}}>
+      {levels.map(lv=>{
+        const pts=Array.from({length:n},(_,i)=>getPoint(i,lv));
+        return<polygon key={lv} points={pts.map(p=>p.join(",")).join(" ")} fill="none" stroke="#E8DDD0" strokeWidth={1}/>;
+      })}
+      {Array.from({length:n},(_,i)=>{
+        const [x,y]=getPoint(i,100);
+        return<line key={i} x1={cx} y1={cy} x2={x} y2={y} stroke="#E8DDD0" strokeWidth={1}/>;
+      })}
+      {avgValues&&(()=>{
+        const pts=avgValues.map((v,i)=>getPoint(i,v));
+        return<polygon points={pts.map(p=>p.join(",")).join(" ")} fill="rgba(180,170,158,0.2)" stroke="#B4AA9E" strokeWidth={1.5} strokeDasharray="4,3"/>;
+      })()}
+      {(()=>{
+        const pts=values.map((v,i)=>getPoint(i,v));
+        return<polygon points={pts.map(p=>p.join(",")).join(" ")} fill="rgba(183,93,64,0.2)" stroke={C.accent} strokeWidth={2.5}/>;
+      })()}
+      {values.map((v,i)=>{
+        const [x,y]=getPoint(i,v);
+        return<circle key={i} cx={x} cy={y} r={4} fill={C.accent} stroke="white" strokeWidth={2}/>;
+      })}
+      {labels.map((label,i)=>{
+        const [x,y]=getPoint(i,122); 
+        const anchor=x<cx-10?"end":x>cx+10?"start":"middle";
+        return<text key={i} x={x} y={y} textAnchor={anchor} dominantBaseline="central" fontSize={13} fontWeight={700} fill={C.text}>{label}</text>;
+      })}
+    </svg>
+  );
+}
+
+function DonutChart({data,size=150}){
+  const total=data.reduce((s,d)=>s+d.count,0);
+  const cx=size/2,cy=size/2,r=size/2-16;
+  let start=-90;
+  const arcs=data.map(d=>{
+    const a=(d.count/total)*360;const s0=start;start+=a;
+    const sr=s0*Math.PI/180,er=(s0+a)*Math.PI/180;
+    const lg=a>180?1:0;
+    return{...d,path:`M${cx},${cy} L${cx+r*Math.cos(sr)},${cy+r*Math.sin(sr)} A${r},${r} 0 ${lg},1 ${cx+r*Math.cos(er)},${cy+r*Math.sin(er)} Z`};
+  });
+  return(
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+      {arcs.map((a,i)=><path key={i} d={a.path} fill={a.color} stroke="white" strokeWidth={2}/>)}
+      <circle cx={cx} cy={cy} r={r*0.55} fill="white"/>
+      <text x={cx} y={cy-2} textAnchor="middle" fontSize={28} fontWeight={800} fill={C.text}>{total}</text>
+      <text x={cx} y={cy+15} textAnchor="middle" fontSize={11} fill={C.sub}>문항</text>
+    </svg>
+  );
+}
+
+function genComment(score, avg, chScores, wq, qs, exam, stName, history, examsList) {
+  const firstName = stName.length >= 3 ? stName.slice(1) : stName;
+  
+  const sorted = [...chScores].sort((a,b) => a.score - b.score);
+  const w = sorted[0], s = sorted[sorted.length-1]; 
+  const easyW = qs.filter(q => wq.includes(q.question_no) && ["하","중하","중"].includes(q.difficulty));
+  const hardC = qs.filter(q => !wq.includes(q.question_no) && ["상","최상"].includes(q.difficulty));
+  let p = [];
+  
+  p.push(`이번 ${exam.title}에서 ${firstName} 학생은 ${score}점을 기록했습니다. 전체 반 평균(${avg}점) ${score >= avg ? "이상의 성적을 거두며 탄탄한 기본기를 보여주었습니다." : "과 비교해 보았을 때, 심화 주제에 접근하기 위한 브릿지 단계의 학습이 더 필요해 보입니다."} 내신과 수능에서 변별력을 가르는 핵심 주제들이 다수 포함된 만큼, 단순한 점수보다는 문항별 분석과 접근법이 중요합니다.`);
+
+  if (hardC.length > 0) p.push(`특히 ${hardC.map(q=>q.question_no+"번("+q.topic+")").join(", ")} 같은 까다로운 복합 고난도 문항을 정확하게 풀어낸 점이 매우 훌륭합니다. ${s?.name||""} 파트에서 변수의 경로를 끝까지 관찰하여 추론하는 힘이 ${firstName} 학생의 강력한 강점으로 자리 잡고 있습니다.`);
+  
+  if (easyW.length > 0) p.push(`반면, 단원 자체의 기본 난도가 비교적 평이한 ${easyW.map(q=>q.question_no+"번("+q.topic+")").join(", ")} 문항에서 오답이 발생한 부분은 다소 아쉽습니다. 정석적인 풀이 방법으로 오답의 원인을 논리적으로 분석하고, 실전 시험에서 시간을 단축할 수 있는 숏컷 풀이법까지 확실하게 체화해야 합니다.`);
+  
+  // 💡 단답형 8문제 관련 멘트 완전히 삭제됨
+  
+  let trendText = "";
+  if (history && history.length > 0) {
+    const sortedExamIds = examsList.map(e => e.id);
+    const studentHistory = [...history].sort((a, b) => sortedExamIds.indexOf(a.exam_id) - sortedExamIds.indexOf(b.exam_id));
+    
+    const recent3 = studentHistory.slice(0, 3).reverse();
+    if (recent3.length > 1) {
+      const scoreFlow = recent3.map(h => {
+        const ex = examsList.find(e => e.id === h.exam_id);
+        const shortName = ex ? ex.title.replace(/실전모의고사\s*/, "") : "";
+        return `${shortName} ${h.total_score}점`;
+      }).join(" ➔ ");
+      trendText = `${firstName} 학생의 최근 성적 흐름(${scoreFlow})을 리뷰해 보면, `;
+    } else {
+      trendText = `${firstName} 학생의 이번 성적을 종합적으로 리뷰해 보면, `;
+    }
+  } else {
+    trendText = `${firstName} 학생의 성적을 종합적으로 리뷰해 보면, `;
+  }
+
+  p.push(`${trendText} ${s?.name||"고난도 추론"} 영역에서의 문제 해결력은 눈에 띄게 발전하고 있는 반면, ${w?.name||"기본 계산"} 영역에서의 실수를 줄이는 것이 보완해야 할 주요 과제로 보입니다. 모의고사 최고난도인 30번대 심화 주제들까지 거침없이 다룰 수 있도록, 앞으로도 꼼꼼하고 깊이 있게 풀이를 진행하며 지도하겠습니다.`);
+  
+  return p;
+}
+
+function App(){
+  const [step,setStep]=useState("loading");
+  const [exams,setExams]=useState([]);
+  const [exam,setExam]=useState(null);
+  const [qs,setQs]=useState([]);
+  const [students,setStudents]=useState([]);
+  const [results,setResults]=useState({});
+  const [allRes,setAllRes]=useState([]);
+  const [studentHistory, setStudentHistory] = useState([]); 
+  const [si,setSi]=useState(0);
+  const [err,setErr]=useState(null);
+
+  useEffect(()=>{sbGet("exams?status=eq.approved&order=created_at.desc").then(d=>{setExams(d);setStep("select")}).catch(e=>setErr(e.message))},[]);
+
+  const pickExam=async(ex)=>{
+    setExam(ex);setErr(null);
+    try{
+      const q=await sbGet(`exam_questions?exam_id=eq.${ex.id}&order=question_no`);setQs(q);
+      const s=await sbGet(`students?class_name=eq.${encodeURIComponent(ex.class_name)}&order=name`);setStudents(s);
+      const r=await sbGet(`exam_results?exam_id=eq.${ex.id}`);
+      const m={};r.forEach(x=>{m[x.student_id]=x});setResults(m);setAllRes(r);setSi(0);setStep("report");
+    }catch(e){setErr(e.message)}
+  };
+
+  const swr=students.filter(s=>results[s.id]);
+  const st=swr[si]||swr[0];
+
+  useEffect(() => {
+    if (step === "report" && st?.id) {
+      sbGet(`exam_results?student_id=eq.${st.id}`)
+        .then(data => setStudentHistory(data))
+        .catch(e => console.error("히스토리 로드 실패:", e));
+    }
+  }, [step, st?.id]);
+
+  if(err)return<div style={{padding:40,textAlign:"center",color:C.primary}}>{err}</div>;
+  if(step==="loading")return<div style={{padding:40,textAlign:"center",color:C.sub}}>로딩 중...</div>;
+
+  if(step==="select")return(
+    <div style={{minHeight:"100vh",padding:20,maxWidth:550,margin:"0 auto"}}>
+      <div style={{background:`linear-gradient(135deg,${C.primary},${C.accent})`,borderRadius:20,padding:28,color:"white",marginBottom:20,textAlign:"center"}}>
+        <div style={{fontSize:10,letterSpacing:2,opacity:0.6}}>STUDENT REPORT</div>
+        <h1 style={{fontSize:22,fontWeight:800}}>성적 분석 리포트</h1>
+      </div>
+      {exams.map(ex=>(
+        <button key={ex.id} onClick={()=>pickExam(ex)} style={{display:"block",width:"100%",background:"white",borderRadius:14,padding:"18px 20px",border:`1.5px solid ${C.border}`,cursor:"pointer",textAlign:"left",marginBottom:10}}>
+          <div style={{fontSize:16,fontWeight:700,color:C.text}}>{ex.title}</div>
+          <div style={{fontSize:12,color:C.sub,marginTop:3}}>{ex.school} · {ex.class_name}</div>
+        </button>
+      ))}
+    </div>
+  );
+
+  if(!swr.length)return<div style={{padding:40,textAlign:"center",color:C.sub}}>채점된 학생이 없습니다<br/><button onClick={()=>setStep("select")} style={{marginTop:12,padding:"8px 16px",background:C.primary,color:"white",border:"none",borderRadius:8,cursor:"pointer"}}>← 돌아가기</button></div>;
+
+  const res=results[st.id],wq=res?.wrong_questions||[],score=res?.total_score||0;
+  const avg=allRes.length?Math.round((allRes.reduce((s,r)=>s+(r.total_score||0),0)/allRes.length)*10)/10:0;
+
+  const qWrongCounts = {};
+  qs.forEach(q => qWrongCounts[q.question_no] = 0);
+  allRes.forEach(r => {
+    (r.wrong_questions || []).forEach(w => {
+      if(qWrongCounts[w] !== undefined) qWrongCounts[w]++;
+    });
+  });
+  
+  const diffWeight = {"최상":6, "상":5, "중상":4, "중":3, "중하":2, "하":1};
+  const hardestQs = [...qs].sort((a,b) => {
+    const cDiff = qWrongCounts[b.question_no] - qWrongCounts[a.question_no];
+    if(cDiff !== 0) return cDiff;
+    return (diffWeight[b.difficulty]||0) - (diffWeight[a.difficulty]||0); 
+  }).slice(0, 3);
+  const hardestText = hardestQs.length > 0 ? hardestQs.map(q => q.question_no + "번").join(", ") : "-";
+
+  let totalDiff = 0;
+  qs.forEach(q => totalDiff += (diffWeight[q.difficulty] || 3));
+  const avgDiff = qs.length ? Math.round(totalDiff / qs.length) : 3;
+  const diffRevMap = {6:"최상", 5:"상", 4:"중상", 3:"중", 2:"중하", 1:"하"};
+  const examDifficulty = diffRevMap[avgDiff] || "중";
+
+  const chMap={};qs.forEach(q=>{if(!chMap[q.chapter])chMap[q.chapter]=[];chMap[q.chapter].push(q)});
+  const chEntries=Object.entries(chMap);
+  const chScores=chEntries.map(([name,qList])=>{
+    const correct=qList.filter(q=>!wq.includes(q.question_no)).length;
+    return{name,score:Math.round((correct/qList.length)*100),total:qList.length,correct};
+  });
+  const avgScores=chEntries.map(([,qList])=>{
+    const rates=allRes.map(r=>{const w=r.wrong_questions||[];return Math.round((qList.filter(q=>!w.includes(q.question_no)).length/qList.length)*100)});
+    return rates.length?Math.round(rates.reduce((a,b)=>a+b,0)/rates.length):0;
+  });
+
+  const diffDist={};qs.forEach(q=>{const k=q.difficulty;diffDist[k]=(diffDist[k]||0)+1});
+  const diffLabels={"하":"기본","중하":"기본+","중":"중간","중상":"중상","상":"상","최상":"최고"};
+  const diffData=Object.entries(diffDist).map(([k,v])=>({name:diffLabels[k]||k,count:v,color:diffConf[k]?.color||"#999"}));
+
+  const chColors=["#8B3A2F","#C0613A","#D4956A","#E8B88A","#6B1A10"];
+  const chDist=chEntries.map(([name,qList],i)=>({name,count:qList.length,color:chColors[i%chColors.length]}));
+
+  const comments=genComment(score, avg, chScores, wq, qs, exam, st.name, studentHistory, exams);
+
+  return(
+    <div className="report-wrap" style={{maxWidth:760,margin:"0 auto",background:C.light,minHeight:"100vh"}}>
+      
+      <div className="no-print" style={{padding:"12px 20px",display:"flex",gap:8,background:"white",borderBottom:`1px solid ${C.border}`}}>
+        <button onClick={()=>setStep("select")} style={{padding:"8px 14px",fontSize:12,background:"white",color:C.sub,border:`1px solid ${C.border}`,borderRadius:8,cursor:"pointer"}}>← 시험 선택</button>
+        <select value={si} onChange={e=>setSi(Number(e.target.value))}
+          style={{flex:1,padding:"8px 12px",fontSize:14,fontWeight:600,border:`1.5px solid ${C.accent}`,borderRadius:8,color:C.text}}>
+          {swr.map((s,i)=><option key={s.id} value={i}>{s.name}</option>)}
+        </select>
+        <button onClick={()=>window.print()} style={{padding:"8px 16px",fontSize:12,fontWeight:600,background:C.primary,color:"white",border:"none",borderRadius:8,cursor:"pointer"}}>🖨 인쇄</button>
+      </div>
+
+      <div className="page-padding">
+        
+        <div className="title-section">
+          <h1>{exam.class_name?.replace(/\[SNT\]\s*/,"")}</h1>
+          <h2>{exam.title}</h2>
+          <div className="report-label">성적 분석 리포트</div>
+          <div className="student-label">학생: <b style={{color:C.text,fontSize:"1.05em"}}>{st.name}</b></div>
+        </div>
+
+        <div className="score-banner">
+          <div className="score-banner-val">{score}점</div>
+          <div className="score-banner-info">
+            <div className="score-banner-sub">총 문항수 {qs.length}문항</div>
+            <div className="score-banner-structure">{exam.structure || "객관식 16 + 단답형 3 + 서술형 3"}</div>
+          </div>
+        </div>
+
+        <div className="grid-3">
+          {[
+            { l: "반 평균", v: `${avg}점`, s: "전체 응시생 기준" },
+            { l: "변별력 문항", v: hardestText, s: null }, 
+            { l: "전체 난도", v: examDifficulty, s: "출제 문항 난도 평균" }
+          ].map(x=>(
+            <div key={x.l} className="grid-3-card">
+              <div className="grid-3-label">{x.l}</div>
+              <div className="grid-3-val" style={{fontSize: x.v.length > 8 ? "18px" : "24px"}}>{x.v}</div>
+              {x.s && <div className="grid-3-sub">{x.s}</div>}
+            </div>
+          ))}
+        </div>
+
+        <div className="no-break" style={{background:"white",borderRadius:12,padding:"22px 24px",border:`1px solid ${C.border}`,marginBottom:24}}>
+          <div style={{fontSize:12,color:C.accent,fontWeight:700,marginBottom:10,textDecoration:"underline",textUnderlineOffset:4}}>코멘트</div>
+          {comments.map((l,i)=>(
+            <p key={i} style={{fontSize:13.5,lineHeight:1.85,color:"#444",marginBottom:i<comments.length-1?12:0,paddingLeft:i===comments.length-1?14:0,borderLeft:i===comments.length-1?`3px solid ${C.accent}`:"none"}}>{l}</p>
+          ))}
+        </div>
+
+        <div className="no-break" style={{background:"white",borderRadius:12,padding:"26px 20px",border:`1px solid ${C.border}`,marginBottom:24}}>
+          <div style={{fontSize:11,color:C.accent,fontWeight:700,letterSpacing:1, marginLeft: 4}}>MASTERY</div>
+          <div style={{fontSize:20,fontWeight:800,color:C.text,marginTop:4,marginBottom:20, marginLeft: 4}}>단원별 성취도</div>
+          
+          <div style={{marginBottom: 30}}>
+            <RadarChart labels={chScores.map(c=>c.name)} values={chScores.map(c=>c.score)} avgValues={avgScores} size={340}/>
+          </div>
+          
+          <div style={{display:"flex", justifyContent:"center", gap: 30, flexWrap:"wrap", width:"100%"}}>
+            {chScores.map((ch)=>(
+              <div key={ch.name} style={{textAlign:"center", minWidth: 60}}>
+                <div style={{fontSize:13,fontWeight:700,color:C.text}}>{ch.name}</div>
+                <div style={{fontSize:22,fontWeight:800,color:C.accent, margin:"2px 0"}}>{ch.score}%</div>
+                <div style={{fontSize:11,color:C.sub}}>{ch.correct}/{ch.total} 정답</div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{display:"flex",justifyContent:"center",gap:20,marginTop:26,fontSize:12,color:C.sub}}>
+            <span style={{display:"flex",alignItems:"center",gap:6}}><span style={{width:16,height:3,background:C.accent,borderRadius:2}}/> 내 성취도</span>
+            <span style={{display:"flex",alignItems:"center",gap:6}}><span style={{width:16,height:3,background:"#B4AA9E",borderRadius:2,opacity:0.5}}/> 전체 평균</span>
+          </div>
+        </div>
+
+        <div className="no-break grid-2">
+          <div style={{background:"white",borderRadius:12,padding:"20px",border:`1px solid ${C.border}`}}>
+            <div style={{fontSize:12,color:C.accent,fontWeight:700,marginBottom:14}}>체감 난도 구성</div>
+            <div className="donut-layout">
+              <DonutChart data={diffData} size={150}/>
+              <div style={{display:"flex",flexDirection:"column",gap:7}}>
+                {diffData.map(d=>(
+                  <div key={d.name} style={{display:"flex",alignItems:"center",gap:8,fontSize:12}}>
+                    <span style={{width:10,height:10,borderRadius:"50%",background:d.color,flexShrink:0}}/>
+                    <span style={{fontWeight:600,color:C.text,width:32,textAlign:"left"}}>{d.name}</span>
+                    <span style={{color:C.sub}}>{d.count}문항</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div style={{background:"white",borderRadius:12,padding:"20px",border:`1px solid ${C.border}`}}>
+            <div style={{fontSize:12,color:C.accent,fontWeight:700,marginBottom:14}}>영역별 출제 비중</div>
+            {chDist.map(d=>(
+              <div key={d.name} style={{marginBottom:10}}>
+                <div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:4}}>
+                  <span style={{fontWeight:600,color:C.text}}>{d.name}</span>
+                  <span style={{color:C.sub}}>{d.count}문항</span>
+                </div>
+                <div style={{height:8,background:"#F0EBE4",borderRadius:4,overflow:"hidden"}}>
+                  <div style={{height:"100%",width:`${(d.count/qs.length)*100}%`,background:d.color,borderRadius:4}}/>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div style={{borderBottom:`2px solid ${C.accent}`,paddingBottom:4}}>
+          <span style={{fontSize:9,color:C.sub}}>이승준 연구소 · {exam.title} · {st.name}</span>
+          <span style={{float:"right",fontSize:9,color:C.sub}}>01</span>
+        </div>
+      </div>
+
+      <div className="page-break page-padding">
+        <div style={{fontSize:11,color:C.accent,fontWeight:700,letterSpacing:1}}>FULL RESULTS</div>
+        <h2 style={{fontSize:22,fontWeight:800,color:C.text,marginTop:4,marginBottom:16}}>전체 문항 결과</h2>
+        {qs.map(q=>{
+          const isW=wq.includes(q.question_no),dc=diffColors[q.difficulty]||{bg:"#F5F5F5",text:"#666"};
+          return(
+            <div key={q.question_no} style={{display:"flex",alignItems:"center",gap:12,padding:"11px 14px",background:"white",borderRadius:10,marginBottom:6,border:`1px solid ${isW?"#FECACA":C.border}`}}>
+              <div style={{width:32,height:32,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",background:isW?"#FEE2E2":"#F0FDF4",color:isW?"#DC2626":"#16A34A",fontWeight:800,fontSize:14}}>{q.question_no}</div>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:13,fontWeight:600,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{q.topic}</div>
+                <div style={{fontSize:11,color:C.sub}}>{q.chapter} · {q.score}점</div>
+              </div>
+              <span style={{fontSize:10,padding:"3px 10px",borderRadius:20,background:dc.bg,color:dc.text,fontWeight:600,flexShrink:0}}>{q.difficulty}</span>
+              <span style={{fontSize:16,fontWeight:800,width:22,textAlign:"center",color:isW?"#EF4444":"#22C55E"}}>{isW?"✗":"✓"}</span>
+            </div>
+          );
+        })}
+        <div style={{borderBottom:`2px solid ${C.accent}`,paddingBottom:4,marginTop:20}}>
+          <span style={{fontSize:9,color:C.sub}}>이승준 연구소 · {exam.title} · {st.name}</span>
+          <span style={{float:"right",fontSize:9,color:C.sub}}>02</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.render(React.createElement(App), document.getElementById("root"));
+</script>
+</body>
+</html>
