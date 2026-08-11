@@ -38,7 +38,7 @@ async function sbPost(table, body) {
 }
 
 // ── Claude API ──
-const ANTHROPIC_KEY = "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";
+const SAVED_KEY = localStorage.getItem("anthropic_key") || "";
 
 const PROMPT = `당신은 고등학교 수학 시험지를 분석하는 전문가입니다.
 
@@ -101,11 +101,13 @@ function App() {
   const [className, setClassName] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveErr, setSaveErr] = useState(null);
-  const [apiKey] = useState(ANTHROPIC_KEY);
+  const [apiKey, setApiKey] = useState(SAVED_KEY);
 
   const handleUpload = useCallback(async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (!apiKey.trim()) { setError("API 키를 입력해 주세요"); return; }
+    localStorage.setItem("anthropic_key", apiKey.trim());
     setFileName(file.name); setError(null); setStep("analyzing");
     setProgress("PDF를 읽고 있습니다...");
     try {
@@ -195,6 +197,14 @@ function App() {
         <div style={{fontSize:40,marginBottom:10}}>📄</div>
         <h1 style={{fontSize:22,fontWeight:800,color:"#1A2F4A",margin:"0 0 4px"}}>문항 등록</h1>
         <p style={{fontSize:14,color:"#888",marginBottom:24,lineHeight:1.6}}>시험지 PDF를 업로드하면<br/>AI가 자동으로 문항을 분석합니다</p>
+
+        <div style={{textAlign:"left",marginBottom:16}}>
+          <label style={{fontSize:11,fontWeight:700,color:"#888"}}>API Key</label>
+          <input value={apiKey} onChange={e=>setApiKey(e.target.value)} type="password"
+            placeholder="sk-ant-..."
+            style={{width:"100%",padding:"10px 14px",fontSize:13,border:"1.5px solid #DDD",borderRadius:10,marginTop:4,outline:"none"}}/>
+          <div style={{fontSize:10,color:"#BBB",marginTop:3}}>한 번 입력하면 이 브라우저에 저장됩니다</div>
+        </div>
 
         <label style={{display:"block",border:"2px dashed #CCC",borderRadius:16,padding:"36px 20px",cursor:"pointer",marginBottom:14}}
           onMouseOver={e=>e.currentTarget.style.borderColor="#2B4A6F"}
