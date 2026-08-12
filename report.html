@@ -196,6 +196,13 @@ function genComment(score, avg, chScores, wq, qs, exam, stName, history, examsLi
   return p;
 }
 
+/* ── URL 파라미터 파싱 ── */
+const URL_PARAMS = new URLSearchParams(window.location.search);
+const PARAM_EXAM_ID = URL_PARAMS.get("exam_id");
+const PARAM_STUDENT_ID = URL_PARAMS.get("student_id");
+const PARAM_TOKEN = URL_PARAMS.get("token");
+const MODE = PARAM_TOKEN ? "parent" : (PARAM_EXAM_ID && PARAM_STUDENT_ID) ? "direct" : (PARAM_STUDENT_ID && !PARAM_EXAM_ID) ? "student" : "staff";
+
 function App(){
   const [step,setStep]=useState("loading");
   const [exams,setExams]=useState([]);
@@ -207,9 +214,90 @@ function App(){
   const [studentHistory, setStudentHistory] = useState([]); 
   const [si,setSi]=useState(0);
   const [err,setErr]=useState(null);
+  /* 학부모 모드 전용 */
+  const [parentStudent,setParentStudent]=useState(null);
+  const [parentExamList,setParentExamList]=useState([]);
 
-  useEffect(()=>{sbGet("exams?status=eq.approved&order=created_at.desc").then(d=>{setExams(d);setStep("select")}).catch(e=>setErr(e.message))},[]);
+  /* ── 초기 로드: 모드별 분기 ── */
+  useEffect(()=>{
+    if(MODE==="direct") initDirect();
+    else if(MODE==="parent") initParent();
+    else if(MODE==="student") initStudent();
+    else sbGet("exams?status=eq.approved&order=created_at.desc").then(d=>{setExams(d);setStep("select")}).catch(e=>setErr(e.message));
+  },[]);
 
+  /* 0) 학생ID 모드: student_id만 → 해당 학생의 시험 목록 */
+  const initStudent=async()=>{
+    try{
+      const sArr=await sbGet(`students?id=eq.${PARAM_STUDENT_ID}`);
+      if(!sArr.length) throw new Error("학생을 찾을 수 없습니다");
+      const st=sArr[0]; setParentStudent(st);
+      const res=await sbGet(`exam_results?student_id=eq.${st.id}&order=created_at.desc`);
+      if(!res.length){setParentExamList([]);setStep("parent-list");return;}
+      const examIds=[...new Set(res.map(r=>r.exam_id))];
+      const allExams=await sbGet(`exams?status=eq.approved&id=in.(${examIds.join(",")})&order=created_at.desc`);
+      const examMap={};allExams.forEach(e=>{examMap[e.id]=e});
+      const list=res.filter(r=>examMap[r.exam_id]).map(r=>({...r,exam:examMap[r.exam_id]}));
+      setParentExamList(list);setExams(allExams);setStep("parent-list");
+    }catch(e){setErr(e.message)}
+  };
+
+  /* 1) 다이렉트 모드: exam_id + student_id → 바로 리포트 */
+  const initDirect=async()=>{
+    try{
+      const [exArr,q,r]=await Promise.all([
+        sbGet(`exams?id=eq.${PARAM_EXAM_ID}`),
+        sbGet(`exam_questions?exam_id=eq.${PARAM_EXAM_ID}&order=question_no`),
+        sbGet(`exam_results?exam_id=eq.${PARAM_EXAM_ID}`)
+      ]);
+      if(!exArr.length) throw new Error("시험을 찾을 수 없습니다");
+      const ex=exArr[0]; setExam(ex); setQs(q);
+      const s=await sbGet(`students?class_name=eq.${encodeURIComponent(ex.class_name)}&order=name`);
+      setStudents(s);
+      const m={};r.forEach(x=>{m[x.student_id]=x});setResults(m);setAllRes(r);
+      /* 정확한 인덱스: swr 배열 내 위치 계산 (BIGINT: String 비교) */
+      const swr2=s.filter(ss=>m[ss.id]);
+      const idx2=swr2.findIndex(ss=>String(ss.id)===String(PARAM_STUDENT_ID));
+      if(idx2<0){setErr("응시한 시험이 없습니다.");return;}
+      setSi(idx2);
+      setStep("report");
+    }catch(e){setErr(e.message)}
+  };
+
+  /* 2) 학부모 모드: token → 학생 조회 → 시험 목록 */
+  const initParent=async()=>{
+    try{
+      const sArr=await sbGet(`students?parent_token=eq.${PARAM_TOKEN}`);
+      if(!sArr.length) throw new Error("유효하지 않은 링크입니다");
+      const st=sArr[0]; setParentStudent(st);
+      /* 이 학생의 모든 시험 결과 조회 */
+      const res=await sbGet(`exam_results?student_id=eq.${st.id}&order=created_at.desc`);
+      if(!res.length){setParentExamList([]);setStep("parent-list");return;}
+      /* 각 결과의 시험 정보 조회 */
+      const examIds=[...new Set(res.map(r=>r.exam_id))];
+      const allExams=await sbGet(`exams?status=eq.approved&id=in.(${examIds.join(",")})&order=created_at.desc`);
+      const examMap={};allExams.forEach(e=>{examMap[e.id]=e});
+      const list=res.filter(r=>examMap[r.exam_id]).map(r=>({...r,exam:examMap[r.exam_id]}));
+      setParentExamList(list);setExams(allExams);setStep("parent-list");
+    }catch(e){setErr(e.message)}
+  };
+
+  /* 학부모: 시험 선택 시 리포트 로드 */
+  const parentPickExam=async(examResult)=>{
+    const ex=examResult.exam; setExam(ex);setErr(null);
+    try{
+      const q=await sbGet(`exam_questions?exam_id=eq.${ex.id}&order=question_no`);setQs(q);
+      const s=await sbGet(`students?class_name=eq.${encodeURIComponent(ex.class_name)}&order=name`);setStudents(s);
+      const r=await sbGet(`exam_results?exam_id=eq.${ex.id}`);
+      const m={};r.forEach(x=>{m[x.student_id]=x});setResults(m);setAllRes(r);
+      const swr2=s.filter(ss=>m[ss.id]);
+      const idx=swr2.findIndex(ss=>String(ss.id)===String(parentStudent.id));
+      if(idx<0){setErr("응시한 시험이 없습니다.");return;}
+      setSi(idx);setStep("report");
+    }catch(e){setErr(e.message)}
+  };
+
+  /* 스태프: 시험 선택 (기존) */
   const pickExam=async(ex)=>{
     setExam(ex);setErr(null);
     try{
@@ -234,6 +322,33 @@ function App(){
   if(err)return<div style={{padding:40,textAlign:"center",color:C.primary}}>{err}</div>;
   if(step==="loading")return<div style={{padding:40,textAlign:"center",color:C.sub}}>로딩 중...</div>;
 
+  /* ── 학부모 모드: 시험 목록 화면 ── */
+  if(step==="parent-list")return(
+    <div style={{minHeight:"100vh",padding:20,maxWidth:550,margin:"0 auto"}}>
+      <div style={{background:`linear-gradient(135deg,${C.primary},${C.accent})`,borderRadius:20,padding:28,color:"white",marginBottom:20,textAlign:"center"}}>
+        <div style={{fontSize:10,letterSpacing:2,opacity:0.6}}>STUDENT REPORT</div>
+        <h1 style={{fontSize:22,fontWeight:800}}>성적 분석 리포트</h1>
+        <div style={{fontSize:14,marginTop:10,opacity:0.9}}>{parentStudent?.name} 학생</div>
+      </div>
+      {parentExamList.length===0?(
+        <div style={{padding:40,textAlign:"center",color:C.sub}}>아직 응시한 시험이 없습니다</div>
+      ):parentExamList.map(item=>(
+        <button key={item.exam_id} onClick={()=>parentPickExam(item)} style={{display:"block",width:"100%",background:"white",borderRadius:14,padding:"18px 20px",border:`1.5px solid ${C.border}`,cursor:"pointer",textAlign:"left",marginBottom:10}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div>
+              <div style={{fontSize:16,fontWeight:700,color:C.text}}>{item.exam.title}</div>
+              <div style={{fontSize:12,color:C.sub,marginTop:3}}>{item.exam.school} · {item.exam.class_name}</div>
+            </div>
+            <div style={{textAlign:"right"}}>
+              <div style={{fontSize:24,fontWeight:800,color:C.accent}}>{item.total_score}<span style={{fontSize:13,fontWeight:600}}>점</span></div>
+            </div>
+          </div>
+        </button>
+      ))}
+    </div>
+  );
+
+  /* ── 스태프 모드: 시험 선택 화면 (기존) ── */
   if(step==="select")return(
     <div style={{minHeight:"100vh",padding:20,maxWidth:550,margin:"0 auto"}}>
       <div style={{background:`linear-gradient(135deg,${C.primary},${C.accent})`,borderRadius:20,padding:28,color:"white",marginBottom:20,textAlign:"center"}}>
@@ -249,7 +364,7 @@ function App(){
     </div>
   );
 
-  if(!swr.length)return<div style={{padding:40,textAlign:"center",color:C.sub}}>채점된 학생이 없습니다<br/><button onClick={()=>setStep("select")} style={{marginTop:12,padding:"8px 16px",background:C.primary,color:"white",border:"none",borderRadius:8,cursor:"pointer"}}>← 돌아가기</button></div>;
+  if(!swr.length)return<div style={{padding:40,textAlign:"center",color:C.sub}}>채점된 학생이 없습니다<br/><button onClick={()=>{(MODE==="parent"||MODE==="student")?setStep("parent-list"):setStep("select")}} style={{marginTop:12,padding:"8px 16px",background:C.primary,color:"white",border:"none",borderRadius:8,cursor:"pointer"}}>← 돌아가기</button></div>;
 
   const res=results[st.id],wq=res?.wrong_questions||[],score=res?.total_score||0;
   const avg=allRes.length?Math.round((allRes.reduce((s,r)=>s+(r.total_score||0),0)/allRes.length)*10)/10:0;
@@ -300,11 +415,17 @@ function App(){
     <div className="report-wrap" style={{maxWidth:760,margin:"0 auto",background:C.light,minHeight:"100vh"}}>
       
       <div className="no-print" style={{padding:"12px 20px",display:"flex",gap:8,background:"white",borderBottom:`1px solid ${C.border}`}}>
-        <button onClick={()=>setStep("select")} style={{padding:"8px 14px",fontSize:12,background:"white",color:C.sub,border:`1px solid ${C.border}`,borderRadius:8,cursor:"pointer"}}>← 시험 선택</button>
-        <select value={si} onChange={e=>setSi(Number(e.target.value))}
-          style={{flex:1,padding:"8px 12px",fontSize:14,fontWeight:600,border:`1.5px solid ${C.accent}`,borderRadius:8,color:C.text}}>
-          {swr.map((s,i)=><option key={s.id} value={i}>{s.name}</option>)}
-        </select>
+        {MODE==="direct"?null:(
+          <button onClick={()=>{(MODE==="parent"||MODE==="student")?setStep("parent-list"):setStep("select")}} style={{padding:"8px 14px",fontSize:12,background:"white",color:C.sub,border:`1px solid ${C.border}`,borderRadius:8,cursor:"pointer"}}>{(MODE==="parent"||MODE==="student")?"← 시험 목록":"← 시험 선택"}</button>
+        )}
+        {MODE==="parent"||MODE==="student"||MODE==="direct"?(
+          <div style={{flex:1,padding:"8px 12px",fontSize:14,fontWeight:600,color:C.text}}>{st?.name}</div>
+        ):(
+          <select value={si} onChange={e=>setSi(Number(e.target.value))}
+            style={{flex:1,padding:"8px 12px",fontSize:14,fontWeight:600,border:`1.5px solid ${C.accent}`,borderRadius:8,color:C.text}}>
+            {swr.map((s,i)=><option key={s.id} value={i}>{s.name}</option>)}
+          </select>
+        )}
         <button onClick={()=>window.print()} style={{padding:"8px 16px",fontSize:12,fontWeight:600,background:C.primary,color:"white",border:"none",borderRadius:8,cursor:"pointer"}}>🖨 인쇄</button>
       </div>
 
