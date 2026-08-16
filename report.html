@@ -3,559 +3,1676 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SNT 성적 분석 리포트</title>
+<title>SNT 시험 분석 시스템</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'Pretendard',-apple-system,'Malgun Gothic',sans-serif;background:#F5F2ED}
-
-.page-padding { padding: 28px 28px 20px; }
-
-/* 🎨 점수 배너 및 상단 레이아웃 */
-.title-section { margin-bottom: 20px; }
-.title-section h1 { font-size: 28px; font-weight: 800; color: #2D2218; letter-spacing: -0.5px; word-break: keep-all; line-height: 1.25; }
-.title-section h2 { font-size: 22px; font-weight: 700; color: #2D2218; margin-top: 6px; word-break: keep-all; }
-.title-section .report-label { font-size: 16px; font-weight: 700; color: #B75D40; margin-top: 10px; }
-.title-section .student-label { font-size: 14px; color: #8C7B6B; margin-top: 14px; }
-
-.score-banner {
-  background: #B75D40; 
-  border-radius: 12px;
-  padding: 22px 30px;
-  color: white;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 24px;
-}
-.score-banner-val { font-size: 46px; font-weight: 900; line-height: 1; }
-.score-banner-info { text-align: right; }
-.score-banner-sub { font-size: 14px; font-weight: 700; opacity: 0.9; margin-bottom: 6px; }
-.score-banner-structure { font-size: 12px; font-weight: 500; opacity: 0.75; letter-spacing: 0.5px; }
-
-/* 📊 3열 요약 카드 */
-.grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin-bottom: 24px; }
-.grid-3-card { background: white; border-radius: 12px; padding: 18px 12px; text-align: center; border: 1px solid #E8DDD0; display: flex; flex-direction: column; justify-content: center; }
-.grid-3-label { font-size: 12px; color: #B75D40; font-weight: 700; margin-bottom: 8px; }
-.grid-3-val { font-size: 24px; font-weight: 800; color: #2D2218; word-break: keep-all; }
-.grid-3-sub { font-size: 11px; color: #8C7B6B; margin-top: 6px; }
-
-/* 하단 2열 차트 */
-.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 24px; }
-.donut-layout { display: flex; align-items: center; gap: 24px; padding-left: 10px; } 
-
-/* 📱 모바일 화면 (600px 이하) 최적화 */
-@media (max-width: 600px) {
-  .page-padding { padding: 16px 14px 20px !important; }
-  
-  .title-section h1 { font-size: 22px !important; }
-  .title-section h2 { font-size: 18px !important; }
-  .title-section .report-label { font-size: 14px !important; margin-top: 8px !important; }
-  
-  .score-banner { padding: 16px 20px !important; }
-  .score-banner-val { font-size: 36px !important; }
-  .score-banner-sub { font-size: 12px !important; margin-bottom: 4px !important; }
-  .score-banner-structure { font-size: 10px !important; }
-  
-  .grid-3 { gap: 8px !important; }
-  .grid-3-card { padding: 14px 4px !important; }
-  .grid-3-label { font-size: 10px !important; margin-bottom: 6px !important; } 
-  .grid-3-val { font-size: 16px !important; }
-  .grid-3-sub { font-size: 9px !important; letter-spacing: -0.5px; }
-  
-  .grid-2 { grid-template-columns: 1fr !important; gap: 16px !important; }
-  .donut-layout { justify-content: center; padding-left: 0; } 
-}
-
+body{font-family:'Pretendard',-apple-system,'Malgun Gothic',sans-serif;background:#F7F7F5}
+@keyframes spin{to{transform:rotate(360deg)}}
+.prog-bar{height:6px;background:#E5E7EB;border-radius:3px;overflow:hidden;margin-top:12px}
+.prog-fill{height:100%;background:#2B4A6F;border-radius:3px;transition:width 0.3s}
+.tab-bar{display:flex;background:white;border-bottom:2px solid #EAEAEA;position:sticky;top:0;z-index:50}
+.tab-btn{flex:1;padding:14px 8px;font-size:13px;font-weight:700;border:none;cursor:pointer;background:transparent;color:#999;border-bottom:3px solid transparent;transition:0.2s}
+.tab-btn.active{color:#2B4A6F;border-bottom-color:#2B4A6F}
+.card{background:white;border-radius:14px;padding:16px 20px;margin-bottom:12px;box-shadow:0 1px 4px rgba(0,0,0,0.04)}
+.btn-primary{padding:12px 28px;font-size:14px;font-weight:700;background:#2B4A6F;color:white;border:none;border-radius:10px;cursor:pointer}
+.btn-primary:disabled{background:#94A3B8;cursor:default}
+.err-box{font-size:13px;color:#DC2626;background:#FEF2F2;padding:10px 14px;border-radius:10px;margin-bottom:12px}
+.toast-box{font-size:13px;color:#16A34A;background:#F0FDF4;padding:10px 14px;border-radius:10px;margin-bottom:12px;text-align:center;font-weight:600}
 @media print{
   @page{size:A4 portrait;margin:10mm}
   html,body{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;background:white!important}
   .no-print{display:none!important}
-  .print-only{display:block!important}
   .report-wrap{max-width:100%!important;box-shadow:none!important}
-  .page-break{break-before:page;page-break-before:always}
-  .no-break{break-inside:avoid;page-break-inside:avoid}
+  .page-break{break-before:page}
+  .no-break{break-inside:avoid}
 }
 </style>
 </head>
 <body>
 <div id="root"></div>
 <script type="text/babel">
-const {useState,useEffect}=React;
+const {useState,useEffect,useCallback}=React;
+pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+// ══════════════════════════════
+//  SUPABASE
+// ══════════════════════════════
 const SB="https://xjycvsnmkbbruhqhmory.supabase.co";
 const SK="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhqeWN2c25ta2JicnVocWhtb3J5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU5MTkxMzMsImV4cCI6MjEwMTQ5NTEzM30.lebGx2ilI5lhfD9MV8yQa1GqVCjIBN8DS1oiqJnTyec";
-const H={"apikey":SK,"Authorization":`Bearer ${SK}`,"Content-Type":"application/json"};
-async function sbGet(p){const r=await fetch(`${SB}/rest/v1/${p}`,{headers:H});if(!r.ok)throw new Error(await r.text());return r.json()}
+const HDR={"apikey":SK,"Authorization":`Bearer ${SK}`,"Content-Type":"application/json"};
 
-const C={primary:"#8B3A2F",accent:"#B75D40",warm:"#D4956A",light:"#FAF6F1",text:"#2D2218",sub:"#8C7B6B",border:"#E8DDD0"};
-const diffColors={"하":{bg:"#E8F5E9",text:"#2E7D32"},"중하":{bg:"#E3F2FD",text:"#1565C0"},"중":{bg:"#FFF8E1",text:"#F57F17"},"중상":{bg:"#FFF3E0",text:"#E65100"},"상":{bg:"#FCE4EC",text:"#C62828"},"최상":{bg:"#F3E5F5",text:"#6A1B9A"}};
-const diffConf={"하":{color:"#D4956A"},"중하":{color:"#C0813A"},"중":{color:"#B06830"},"중상":{color:"#9A5028"},"상":{color:"#8B3A2F"},"최상":{color:"#6B1A10"}};
+async function sbGet(p){const r=await fetch(`${SB}/rest/v1/${p}`,{headers:HDR});if(!r.ok)throw new Error(await r.text());return r.json()}
+async function sbPost(t,b){const r=await fetch(`${SB}/rest/v1/${t}`,{method:"POST",headers:{...HDR,"Prefer":"return=representation"},body:JSON.stringify(b)});if(!r.ok)throw new Error(await r.text());return r.json()}
+async function sbUpsert(t,b,onConflict){
+  const url=onConflict?`${SB}/rest/v1/${t}?on_conflict=${onConflict}`:`${SB}/rest/v1/${t}`;
+  const r=await fetch(url,{
+    method:"POST",headers:{...HDR,"Prefer":"return=representation,resolution=merge-duplicates"},
+    body: JSON.stringify(b),
+  });if(!r.ok)throw new Error(await r.text());return r.json()}
+async function sbDelete(t,filter){
+  const r=await fetch(`${SB}/rest/v1/${t}?${filter}`,{method:"DELETE",headers:HDR});
+  if(!r.ok)throw new Error(await r.text());
+}
+async function sbPatch(t,filter,b){
+  const r=await fetch(`${SB}/rest/v1/${t}?${filter}`,{method:"PATCH",headers:{...HDR,"Prefer":"return=representation"},body:JSON.stringify(b)});
+  if(!r.ok)throw new Error(await r.text());return r.json()}
 
-function RadarChart({labels,values,avgValues,size=340}){
-  const cx=size/2, cy=size/2, maxR=100; 
-  const n=labels.length;
-  const angleStep=(2*Math.PI)/n;
-  const getPoint=(i,val)=>{
-    const angle=-Math.PI/2+i*angleStep;
-    const r=(val/100)*maxR;
-    return[cx+r*Math.cos(angle),cy+r*Math.sin(angle)];
+// ══════════════════════════════
+//  SHARED
+// ══════════════════════════════
+const SAVED_KEY=localStorage.getItem("anthropic_key")||"";
+const DIFFS=["하","중하","중","중상","상","최상"];
+const TYPES=["선택형","단답형","서술형"];
+// ── 시험 유형 (관리앱 연동 분류의 기준) ──
+// mock=매 차시 실전모의고사 / clinic=클리닉 시험 / retest=재시험
+// 제목 문자열이 아니라 이 값으로 관리앱이 판단합니다.
+const CATS=[
+  {id:"mock",  label:"실전모의고사", desc:"매 차시마다 보는 시험", color:"#2B4A6F", bg:"#EEF4FB", bd:"#C7DAF0"},
+  {id:"clinic",label:"클리닉",      desc:"클리닉 때 보는 시험",   color:"#7C3AED", bg:"#F5F0FF", bd:"#DDD0FA"},
+  {id:"retest",label:"재시험",      desc:"과락자 재시험",        color:"#D97706", bg:"#FFF7ED", bd:"#FBD9A5"}
+];
+const catOf=c=>CATS.find(x=>x.id===(c||"mock"))||CATS[0];
+function CatBadge({cat}){const c=catOf(cat);return<span style={{fontSize:10,fontWeight:800,padding:"2px 7px",borderRadius:6,background:c.bg,color:c.color,border:`1px solid ${c.bd}`,whiteSpace:"nowrap"}}>{c.label}</span>}
+// ── URL 파라미터 (학생·학부모 딥링크용) ──
+const QS=new URLSearchParams(location.search);
+const QS_STUDENT=QS.get("student_id");
+const QS_EXAM=QS.get("exam_id");
+const diffMap={"하":{bg:"#E8F5E9",text:"#2E7D32"},"중하":{bg:"#E3F2FD",text:"#1565C0"},"중":{bg:"#FFF8E1",text:"#F57F17"},"중상":{bg:"#FFF3E0",text:"#E65100"},"상":{bg:"#FCE4EC",text:"#C62828"},"최상":{bg:"#F3E5F5",text:"#6A1B9A"}};
+const typeMap={"선택형":{bg:"#E3F2FD",text:"#1565C0"},"단답형":{bg:"#FFF3E0",text:"#E65100"},"서술형":{bg:"#FCE4EC",text:"#C62828"}};
+function Badge({value,map}){const c=map[value]||{bg:"#F5F5F5",text:"#666"};return<span style={{fontSize:11,padding:"2px 8px",borderRadius:12,background:c.bg,color:c.text,fontWeight:600}}>{value}</span>}
+
+function ApiKeyInput({apiKey,setApiKey}){
+  return <div className="card"><div style={{fontSize:11,fontWeight:700,color:"#888",marginBottom:6}}>API Key</div>
+    <input value={apiKey} onChange={e=>setApiKey(e.target.value)} type="password" placeholder="sk-ant-..."
+      style={{width:"100%",padding:"10px 14px",fontSize:13,border:"1.5px solid #DDD",borderRadius:10,outline:"none"}}/>
+    <div style={{fontSize:10,color:"#BBB",marginTop:3}}>한 번 입력하면 브라우저에 저장됩니다</div></div>;
+}
+
+// ══════════════════════════════
+//  TAB 1: 문항 등록
+// ══════════════════════════════
+const REG_PROMPT=`당신은 고등학교 수학 시험지를 분석하는 전문가입니다.
+시험지 PDF를 분석하여 다음 JSON 형식으로 모든 문항 정보를 추출하세요.
+출력 형식 (JSON만 출력, 다른 텍스트 없이):
+{"exam":{"title":"실전 모의고사 14회","subtitle":"2026학년도 1학기 기말 대비","school":"중산고","round":14,"grade":"고1","total_questions":22,"structure":"선택형 16 + 단답형 3 + 서술형 3","teacher":"조창성T&이승준T"},
+"questions":[{"no":1,"type":"선택형","chapter":"행렬","sub_chapter":"행렬의 상등","topic":"성분 비교","difficulty":"하","score":3.9,"answer":"2"}]}
+분석 규칙:
+1. chapter(대단원)은 교육과정 기준: 다항식, 방정식, 부등식, 경우의수, 행렬, 일차변환, 도형의 방정식 등
+2. sub_chapter(중단원)은 교육과정상 중단원 수준으로만 분류할 것. 예시: 도형의 방정식 → 평면좌표 / 직선의 방정식 / 원의 방정식 / 도형의 이동, 다항식 → 다항식의 연산 / 나머지정리와 인수분해, 수열 → 등차수열과 등비수열 / 수열의 합 / 수학적 귀납법. 소단원(예: 두 점 사이의 거리, 내분점과 외분점)까지 내려가지 말 것
+3. topic은 문항의 구체적 유형 (소단원 수준의 세부 내용은 여기에 기술)
+4. difficulty는 배점과 문항 내용을 기반으로 판단: 하/중하/중/중상/상/최상
+5. score(배점)은 PDF에 표시된 배점표를 참고
+6. answer: 선택형은 번호(1~5), 단답형은 숫자, 서술형은 정답 값
+7. 정답은 PDF 마지막 페이지의 정답표를 참고
+8. type: 선택형/단답형/서술형 구분`;
+
+function RegisterTab({apiKey}){
+  const[step,setStep]=useState("upload");
+  const[examInfo,setExamInfo]=useState(null);
+  const[questions,setQuestions]=useState([]);
+  const[error,setError]=useState(null);
+  const[editCell,setEditCell]=useState(null);
+  const[fileName,setFileName]=useState("");
+  const[progress,setProgress]=useState("");
+  const[className,setClassName]=useState("");
+  const[category,setCategory]=useState("mock");   // 시험 유형 — 관리앱 연동 분류 기준
+  const[saving,setSaving]=useState(false);
+  const[saveErr,setSaveErr]=useState(null);
+  // 시험 관리용
+  const[regExams,setRegExams]=useState([]);
+  const[deleting,setDeleting]=useState(null);
+  const[confirmDel,setConfirmDel]=useState(null);
+  const[toast,setToast]=useState("");
+  const[catSaving,setCatSaving]=useState(null);
+
+  useEffect(()=>{if(step==="upload")sbGet("exams?status=eq.approved&order=created_at.desc").then(setRegExams).catch(()=>{})},[step]);
+
+  const deleteExam=async(ex)=>{
+    setDeleting(ex.id);
+    try{
+      await sbDelete("exam_subjective",`exam_id=eq.${ex.id}`);
+      await sbDelete("exam_results",`exam_id=eq.${ex.id}`);
+      await sbDelete("exam_questions",`exam_id=eq.${ex.id}`);
+      await sbDelete("exams",`id=eq.${ex.id}`);
+      setRegExams(prev=>prev.filter(e=>e.id!==ex.id));
+      setConfirmDel(null);setToast(`"${ex.title}" 삭제 완료`);setTimeout(()=>setToast(""),3000);
+    }catch(err){setError(`삭제 실패: ${err.message}`)}finally{setDeleting(null)}
   };
-  const levels=[20,40,60,80,100];
+
+  const handleUpload=useCallback(async(e)=>{
+    const file=e.target.files?.[0];if(!file)return;
+    if(!apiKey.trim()){setError("API 키를 입력해 주세요");return}
+    localStorage.setItem("anthropic_key",apiKey.trim());
+    setFileName(file.name);setError(null);setStep("analyzing");setProgress("PDF를 읽고 있습니다...");
+    try{
+      const b64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result.split(",")[1]);r.onerror=()=>rej(new Error("파일 읽기 실패"));r.readAsDataURL(file)});
+      setProgress("Claude AI가 문항을 분석하고 있습니다...");
+      const resp=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":apiKey.trim(),"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
+        body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:4000,messages:[{role:"user",content:[{type:"document",source:{type:"base64",media_type:"application/pdf",data:b64}},{type:"text",text:REG_PROMPT}]}]})});
+      if(!resp.ok)throw new Error(`API 오류: ${resp.status}`);
+      const data=await resp.json();
+      const txt=data.content.map(i=>i.type==="text"?i.text:"").filter(Boolean).join("\n");
+      const parsed=JSON.parse(txt.replace(/```json|```/g,"").trim());
+      setExamInfo(parsed.exam);setQuestions(parsed.questions);setStep("review");
+    }catch(err){setError(`분석 실패: ${err.message}`);setStep("upload")}
+  },[apiKey]);
+
+  const updateQ=(i,f,v)=>{setQuestions(p=>{const u=[...p];u[i]={...u[i],[f]:v};return u});setEditCell(null)};
+
+  const handleApprove=async()=>{
+    if(!className.trim()){setSaveErr("반 이름을 입력해 주세요");return}
+    setSaving(true);setSaveErr(null);
+    try{
+      const[exam]=await sbPost("exams",{round:examInfo.round,title:examInfo.title,subtitle:examInfo.subtitle||null,school:examInfo.school||null,class_name:className.trim(),category:category,total_questions:questions.length,structure:examInfo.structure||null,overall_difficulty:"중",killer_questions:[],status:"approved",approved_at:new Date().toISOString()});
+      await sbPost("exam_questions",questions.map(q=>({exam_id:exam.id,question_no:q.no,question_type:q.type,chapter:q.chapter,sub_chapter:q.sub_chapter||null,topic:q.topic,difficulty:q.difficulty,score:Number(q.score),answer:String(q.answer)})));
+      setStep("done");
+    }catch(err){setSaveErr(`저장 실패: ${err.message}`)}finally{setSaving(false)}
+  };
+
+  const totalScore=questions.reduce((s,q)=>s+(Number(q.score)||0),0);
+  const reset=()=>{setStep("upload");setExamInfo(null);setQuestions([]);setClassName("");setCategory("mock")};
+
+  if(step==="upload")return(
+    <div style={{padding:20,maxWidth:500,margin:"0 auto"}}>
+      {error&&<div className="err-box">{error}</div>}
+      {toast&&<div className="toast-box">{toast}</div>}
+      <label style={{display:"block",border:"2px dashed #CCC",borderRadius:16,padding:"40px 20px",cursor:"pointer",textAlign:"center",background:"white"}}
+        onMouseOver={e=>e.currentTarget.style.borderColor="#2B4A6F"} onMouseOut={e=>e.currentTarget.style.borderColor="#CCC"}>
+        <input type="file" accept=".pdf" onChange={handleUpload} style={{display:"none"}}/>
+        <div style={{fontSize:36,marginBottom:8}}>📄</div>
+        <div style={{fontSize:15,fontWeight:600,color:"#333"}}>시험지 PDF 업로드</div>
+        <div style={{fontSize:12,color:"#999",marginTop:4}}>시험지 + 정답표 포함</div>
+      </label>
+
+      {/* 등록된 시험 관리 */}
+      {regExams.length>0&&<div style={{marginTop:20}}>
+        <div style={{fontSize:11,fontWeight:700,color:"#888",marginBottom:8}}>등록된 시험 관리</div>
+        {regExams.map(ex=>(
+          <div key={ex.id} style={{background:"white",borderRadius:12,padding:"12px 16px",marginBottom:6,boxShadow:"0 1px 4px rgba(0,0,0,0.04)",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+            <div>
+              <div style={{fontSize:14,fontWeight:600,color:"#1A2F4A",display:"flex",alignItems:"center",gap:6}}>
+                <CatBadge cat={ex.category}/>{ex.title}
+              </div>
+              <div style={{fontSize:11,color:"#999",marginTop:2}}>{ex.school} · {ex.class_name} · {ex.total_questions}문항</div>
+              <div style={{marginTop:6,display:"flex",alignItems:"center",gap:5}}>
+                <span style={{fontSize:10,color:"#BBB",fontWeight:700}}>유형 변경</span>
+                <select value={ex.category||"mock"} disabled={catSaving===ex.id}
+                  onChange={async e=>{
+                    const v=e.target.value;setCatSaving(ex.id);
+                    try{
+                      await sbPatch("exams",`id=eq.${ex.id}`,{category:v});
+                      setRegExams(p=>p.map(x=>x.id===ex.id?{...x,category:v}:x));
+                      setToast(`"${ex.title}" → ${catOf(v).label}로 변경했습니다`);setTimeout(()=>setToast(""),2500);
+                    }catch(err){alert("유형 변경 실패: "+err.message)}
+                    finally{setCatSaving(null)}
+                  }}
+                  style={{fontSize:10,padding:"3px 6px",border:"1px solid #E0E0E0",borderRadius:5,color:"#666",background:"white",cursor:"pointer"}}>
+                  {CATS.map(c=><option key={c.id} value={c.id}>{c.label}</option>)}
+                </select>
+                {catSaving===ex.id&&<span style={{fontSize:10,color:"#999"}}>저장 중…</span>}
+              </div>
+            </div>
+            {confirmDel===ex.id?(
+              <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                <span style={{fontSize:11,color:"#EF4444",fontWeight:600}}>정말 삭제?</span>
+                <button onClick={()=>deleteExam(ex)} disabled={deleting===ex.id}
+                  style={{padding:"5px 12px",fontSize:11,fontWeight:700,background:"#EF4444",color:"white",border:"none",borderRadius:6,cursor:"pointer"}}>
+                  {deleting===ex.id?"삭제 중...":"확인"}</button>
+                <button onClick={()=>setConfirmDel(null)}
+                  style={{padding:"5px 10px",fontSize:11,background:"#F0F0F0",color:"#666",border:"none",borderRadius:6,cursor:"pointer"}}>취소</button>
+              </div>
+            ):(
+              <button onClick={()=>setConfirmDel(ex.id)}
+                style={{padding:"5px 14px",fontSize:11,fontWeight:600,background:"#FEF2F2",color:"#EF4444",border:"1px solid #FECACA",borderRadius:6,cursor:"pointer"}}>삭제</button>
+            )}
+          </div>
+        ))}
+      </div>}
+    </div>
+  );
+
+  if(step==="analyzing")return(
+    <div style={{padding:40,textAlign:"center"}}>
+      <div style={{width:40,height:40,border:"4px solid #E5E5E5",borderTopColor:"#2B4A6F",borderRadius:"50%",margin:"0 auto 16px",animation:"spin 1s linear infinite"}}/>
+      <div style={{fontSize:15,fontWeight:700,color:"#1A2F4A"}}>{progress}</div>
+      <div style={{fontSize:12,color:"#BBB",marginTop:8}}>{fileName}</div>
+    </div>
+  );
+
+  if(step==="done")return(
+    <div style={{padding:40,textAlign:"center"}}>
+      <div style={{fontSize:48,marginBottom:12}}>✅</div>
+      <h2 style={{fontSize:20,fontWeight:800,color:"#1A2F4A",marginBottom:6}}>등록 완료</h2>
+      <p style={{fontSize:14,color:"#888",marginBottom:4}}>{examInfo?.title} · {examInfo?.school}</p>
+      <p style={{fontSize:13,color:"#AAA",marginBottom:24}}>{questions.length}문항이 승인되었습니다</p>
+      <button onClick={reset} className="btn-primary">새 시험 등록</button>
+    </div>
+  );
+
   return(
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{maxWidth:"100%", height:"auto", display:"block", margin:"0 auto"}}>
-      {levels.map(lv=>{
-        const pts=Array.from({length:n},(_,i)=>getPoint(i,lv));
-        return<polygon key={lv} points={pts.map(p=>p.join(",")).join(" ")} fill="none" stroke="#E8DDD0" strokeWidth={1}/>;
-      })}
-      {Array.from({length:n},(_,i)=>{
-        const [x,y]=getPoint(i,100);
-        return<line key={i} x1={cx} y1={cy} x2={x} y2={y} stroke="#E8DDD0" strokeWidth={1}/>;
-      })}
-      {avgValues&&(()=>{
-        const pts=avgValues.map((v,i)=>getPoint(i,v));
-        return<polygon points={pts.map(p=>p.join(",")).join(" ")} fill="rgba(180,170,158,0.2)" stroke="#B4AA9E" strokeWidth={1.5} strokeDasharray="4,3"/>;
-      })()}
-      {(()=>{
-        const pts=values.map((v,i)=>getPoint(i,v));
-        return<polygon points={pts.map(p=>p.join(",")).join(" ")} fill="rgba(183,93,64,0.2)" stroke={C.accent} strokeWidth={2.5}/>;
-      })()}
-      {values.map((v,i)=>{
-        const [x,y]=getPoint(i,v);
-        return<circle key={i} cx={x} cy={y} r={4} fill={C.accent} stroke="white" strokeWidth={2}/>;
-      })}
-      {labels.map((label,i)=>{
-        const [x,y]=getPoint(i,122); 
-        const anchor=x<cx-10?"end":x>cx+10?"start":"middle";
-        return<text key={i} x={x} y={y} textAnchor={anchor} dominantBaseline="central" fontSize={13} fontWeight={700} fill={C.text}>{label}</text>;
-      })}
-    </svg>
+    <div style={{padding:"16px 16px 60px",maxWidth:900,margin:"0 auto"}}>
+      <div style={{background:"linear-gradient(135deg,#1A2F4A,#2B4A6F)",borderRadius:16,padding:"20px 24px",color:"white",marginBottom:16}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end"}}>
+          <div><h2 style={{fontSize:20,fontWeight:800}}>{examInfo?.title||"문항 검수"}</h2>
+            <div style={{fontSize:12,opacity:0.6,marginTop:4}}>{examInfo?.school} · {examInfo?.grade} · {examInfo?.structure}</div></div>
+          <div style={{textAlign:"right"}}><div style={{fontSize:28,fontWeight:800}}>{questions.length}</div><div style={{fontSize:10,opacity:0.5}}>문항</div></div>
+        </div>
+      </div>
+      <div className="card" style={{overflow:"auto"}}>
+        <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+          <thead><tr style={{background:"#F8F9FA"}}>
+            {["#","유형","대단원","중단원","세부 유형","난이도","배점","정답"].map(h=>(
+              <th key={h} style={{padding:"10px 12px",textAlign:"left",fontSize:11,fontWeight:700,color:"#888",borderBottom:"2px solid #EAEAEA",whiteSpace:"nowrap"}}>{h}</th>
+            ))}
+          </tr></thead>
+          <tbody>{questions.map((q,i)=>{
+            const cs=f=>({padding:"8px 12px",borderBottom:"1px solid #F5F5F5",cursor:"pointer",background:editCell?.i===i&&editCell?.f===f?"#FFF9E6":"transparent",whiteSpace:"nowrap"});
+            const ed=(f,t="text")=>{
+              const k=`${i}-${f}`;
+              if(editCell?.i===i&&editCell?.f===f){
+                if(f==="difficulty")return<td key={k} style={cs(f)}><select value={q[f]} autoFocus onChange={e=>updateQ(i,f,e.target.value)} onBlur={()=>setEditCell(null)} style={{fontSize:12,padding:"2px 4px",border:"1px solid #2B4A6F",borderRadius:4}}>{DIFFS.map(d=><option key={d}>{d}</option>)}</select></td>;
+                if(f==="type")return<td key={k} style={cs(f)}><select value={q[f]} autoFocus onChange={e=>updateQ(i,f,e.target.value)} onBlur={()=>setEditCell(null)} style={{fontSize:12,padding:"2px 4px",border:"1px solid #2B4A6F",borderRadius:4}}>{TYPES.map(d=><option key={d}>{d}</option>)}</select></td>;
+                return<td key={k} style={cs(f)}><input type={t} defaultValue={q[f]} autoFocus onBlur={e=>updateQ(i,f,t==="number"?Number(e.target.value):e.target.value)} onKeyDown={e=>{if(e.key==="Enter")e.target.blur()}} style={{fontSize:13,width:t==="number"?50:100,padding:"2px 6px",border:"1px solid #2B4A6F",borderRadius:4,outline:"none"}}/></td>;
+              }
+              return<td key={k} style={cs(f)} onClick={()=>setEditCell({i,f})}>{f==="difficulty"?<Badge value={q[f]} map={diffMap}/>:f==="type"?<Badge value={q[f]} map={typeMap}/>:q[f]}</td>;
+            };
+            return<tr key={i} style={{background:i%2===0?"white":"#FCFCFC"}}>
+              <td style={{padding:"8px 12px",borderBottom:"1px solid #F5F5F5",fontWeight:800,color:"#2B4A6F"}}>{q.no}</td>
+              {ed("type")}{ed("chapter")}{ed("sub_chapter")}{ed("topic")}{ed("difficulty")}{ed("score","number")}{ed("answer")}
+            </tr>;
+          })}</tbody>
+        </table>
+      </div>
+      {/* ── 시험 유형: 관리앱이 이 값으로 차시 실모/클리닉을 구분합니다 ── */}
+      <div className="card">
+        <div style={{fontSize:11,fontWeight:700,color:"#888",marginBottom:8}}>시험 유형 (필수) — 관리앱 점수 연동 기준</div>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+          {CATS.map(c=>(
+            <button key={c.id} onClick={()=>setCategory(c.id)}
+              style={{flex:"1 1 150px",textAlign:"left",padding:"11px 14px",borderRadius:10,cursor:"pointer",
+                background:category===c.id?c.bg:"white",
+                border:category===c.id?`2px solid ${c.color}`:"1.5px solid #E5E5E5"}}>
+              <div style={{fontSize:13,fontWeight:800,color:category===c.id?c.color:"#555"}}>
+                {category===c.id?"● ":"○ "}{c.label}
+              </div>
+              <div style={{fontSize:10,color:"#999",marginTop:2,paddingLeft:14}}>{c.desc}</div>
+            </button>
+          ))}
+        </div>
+        <div style={{fontSize:10,color:"#AAA",marginTop:8,lineHeight:1.5}}>
+          제목은 자유롭게 쓰셔도 됩니다. 관리앱은 제목이 아니라 <b>이 유형 값</b>으로 판단하므로
+          클리닉 시험이 차시별 실모 그래프에 섞이지 않습니다.
+        </div>
+      </div>
+      <div className="card" style={{display:"flex",gap:12,alignItems:"flex-end",flexWrap:"wrap"}}>
+        <div style={{flex:1,minWidth:160}}>
+          <div style={{fontSize:11,fontWeight:700,color:"#888",marginBottom:4}}>반 이름 (필수)</div>
+          <input value={className} onChange={e=>{setClassName(e.target.value);setSaveErr(null)}} placeholder="예: [SNT] 고1 여름방학 조창성&이승준T"
+            style={{width:"100%",padding:"10px 14px",fontSize:14,border:saveErr&&!className.trim()?"2px solid #EF4444":"1.5px solid #DDD",borderRadius:10,outline:"none"}}/>
+        </div>
+        <button onClick={reset} style={{padding:"12px 20px",fontSize:14,fontWeight:600,background:"white",color:"#666",border:"1px solid #DDD",borderRadius:10,cursor:"pointer",height:44}}>다시 업로드</button>
+        <button onClick={handleApprove} disabled={saving} className="btn-primary" style={{height:44}}>{saving?"저장 중...":"✓ 승인 · DB 저장"}</button>
+      </div>
+      {saveErr&&<div className="err-box">{saveErr}</div>}
+    </div>
   );
 }
 
-function DonutChart({data,size=150}){
-  const total=data.reduce((s,d)=>s+d.count,0);
-  const cx=size/2,cy=size/2,r=size/2-16;
-  let start=-90;
-  const arcs=data.map(d=>{
-    const a=(d.count/total)*360;const s0=start;start+=a;
-    const sr=s0*Math.PI/180,er=(s0+a)*Math.PI/180;
-    const lg=a>180?1:0;
-    return{...d,path:`M${cx},${cy} L${cx+r*Math.cos(sr)},${cy+r*Math.sin(sr)} A${r},${r} 0 ${lg},1 ${cx+r*Math.cos(er)},${cy+r*Math.sin(er)} Z`};
-  });
-  return(
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-      {arcs.map((a,i)=><path key={i} d={a.path} fill={a.color} stroke="white" strokeWidth={2}/>)}
-      <circle cx={cx} cy={cy} r={r*0.55} fill="white"/>
-      <text x={cx} y={cy-2} textAnchor="middle" fontSize={28} fontWeight={800} fill={C.text}>{total}</text>
-      <text x={cx} y={cy+15} textAnchor="middle" fontSize={11} fill={C.sub}>문항</text>
-    </svg>
-  );
+// ══════════════════════════════
+//  TAB 2: OMR 채점
+// ══════════════════════════════
+// OMR_PROMPT 삭제됨 — 버블 읽기는 픽셀 분석으로 대체, AI는 이름만 읽음
+
+
+
+
+async function renderPage(pdf,n){
+  const pg=await pdf.getPage(n);
+  const rot=pg.rotate||0; // PDF 페이지 자체 회전값
+  const vp=pg.getViewport({scale:4});
+  const cv=document.createElement("canvas");
+  cv.width=vp.width;cv.height=vp.height;
+  const ctx0=cv.getContext("2d");
+  await pg.render({canvasContext:ctx0,viewport:vp}).promise;
+
+  // ── 1단계: 이진화 (대비 극대화) ──
+  const imgData=ctx0.getImageData(0,0,cv.width,cv.height);
+  const px=imgData.data;
+  for(let i=0;i<px.length;i+=4){
+    const gray=px[i]*0.299+px[i+1]*0.587+px[i+2]*0.114;
+    const val=gray<190?0:255;
+    px[i]=px[i+1]=px[i+2]=val;
+  }
+  ctx0.putImageData(imgData,0,0);
+
+  // ── 2단계: 반시계 90° 회전 ──
+  // OMR 스캔 PDF는 내용이 시계방향으로 90° 돌아가 있음
+  // 가로형이든 세로형이든 항상 반시계 90° 회전 적용
+  const rc=document.createElement("canvas");
+  rc.width=cv.height;rc.height=cv.width;
+  const ctx=rc.getContext("2d");
+  ctx.translate(0,rc.height);
+  ctx.rotate(-Math.PI/2);
+  ctx.drawImage(cv,0,0);
+  return rc; // canvas 자체를 반환 (픽셀 접근용)
 }
 
-function genComment(score, avg, chScores, wq, qs, exam, stName, history, examsList) {
-  const firstName = stName.length >= 3 ? stName.slice(1) : stName;
-  
-  const sorted = [...chScores].sort((a,b) => a.score - b.score);
-  const w = sorted[0], s = sorted[sorted.length-1]; 
-  const easyW = qs.filter(q => wq.includes(q.question_no) && ["하","중하","중"].includes(q.difficulty));
-  const hardC = qs.filter(q => !wq.includes(q.question_no) && ["상","최상"].includes(q.difficulty));
-  let p = [];
-  
-  p.push(`이번 ${exam.title}에서 ${firstName} 학생은 ${score}점을 기록했습니다. 전체 반 평균(${avg}점) ${score >= avg ? "이상의 성적을 거두며 탄탄한 기본기를 보여주었습니다." : "과 비교해 보았을 때, 심화 주제에 접근하기 위한 브릿지 단계의 학습이 더 필요해 보입니다."} 내신과 수능에서 변별력을 가르는 핵심 주제들이 다수 포함된 만큼, 단순한 점수보다는 문항별 분석과 접근법이 중요합니다.`);
+// ══════════════════════════════
+//  픽셀 기반 OMR 리더 (방식 2)
+// ══════════════════════════════
+// 학교(스캐너)별 OMR 그리드 프로필 — 같은 OMR 용지라도 스캐너에 따라 좌표가 다름
+const OMR_PROFILES={
+  default:{
+    phone:{x0:0.39798,y0:0.13020,dx:0.02228,dy:0.02856,cols:8,rows:10},
+    obj1: {x0:0.65627,y0:0.14070,dx:0.02500,dy:0.03108,cols:5,rows:10},
+    obj2: {x0:0.83807,y0:0.14070,dx:0.02320,dy:0.03108,cols:5,rows:10},
+    sa:   {bx:0.08910,by:0.59975,cdx:0.02673,rdy:0.03276,qdx:0.11138,qCount:8,cols:3,rows:10},
+  },
+  숙명여고:{
+    phone:{x0:0.39798,y0:0.13020,dx:0.02228,dy:0.02856,cols:8,rows:10},
+    obj1: {x0:0.66825,y0:0.14070,dx:0.01901,dy:0.03108,cols:5,rows:10},
+    obj2: {x0:0.84645,y0:0.14070,dx:0.01901,dy:0.03108,cols:5,rows:10},
+    sa:   {bx:0.08910,by:0.59975,cdx:0.02673,rdy:0.03276,qdx:0.11138,qCount:8,cols:3,rows:10},
+  },
+};
+function getOMRGrid(school){
+  if(school)for(const k of Object.keys(OMR_PROFILES)){if(k!=="default"&&school.includes(k))return OMR_PROFILES[k];}
+  return OMR_PROFILES.default;
+}
+let OMR_GRID=OMR_PROFILES.default; // 실행시 동적으로 교체됨
 
-  if (hardC.length > 0) p.push(`특히 ${hardC.map(q=>q.question_no+"번("+q.topic+")").join(", ")} 같은 까다로운 복합 고난도 문항을 정확하게 풀어낸 점이 매우 훌륭합니다. ${s?.name||""} 파트에서 변수의 경로를 끝까지 관찰하여 추론하는 힘이 ${firstName} 학생의 강력한 강점으로 자리 잡고 있습니다.`);
-  
-  if (easyW.length > 0) p.push(`반면, 단원 자체의 기본 난도가 비교적 평이한 ${easyW.map(q=>q.question_no+"번("+q.topic+")").join(", ")} 문항에서 오답이 발생한 부분은 다소 아쉽습니다. 정석적인 풀이 방법으로 오답의 원인을 논리적으로 분석하고, 실전 시험에서 시간을 단축할 수 있는 숏컷 풀이법까지 확실하게 체화해야 합니다.`);
-  
-  // 💡 단답형 8문제 관련 멘트 완전히 삭제됨
-  
-  let trendText = "";
-  if (history && history.length > 0) {
-    const sortedExamIds = examsList.map(e => e.id);
-    const studentHistory = [...history].sort((a, b) => sortedExamIds.indexOf(a.exam_id) - sortedExamIds.indexOf(b.exam_id));
-    
-    const recent3 = studentHistory.slice(0, 3).reverse();
-    if (recent3.length > 1) {
-      const scoreFlow = recent3.map(h => {
-        const ex = examsList.find(e => e.id === h.exam_id);
-        const shortName = ex ? ex.title.replace(/실전모의고사\s*/, "") : "";
-        return `${shortName} ${h.total_score}점`;
-      }).join(" ➔ ");
-      trendText = `${firstName} 학생의 최근 성적 흐름(${scoreFlow})을 리뷰해 보면, `;
-    } else {
-      trendText = `${firstName} 학생의 이번 성적을 종합적으로 리뷰해 보면, `;
-    }
-  } else {
-    trendText = `${firstName} 학생의 성적을 종합적으로 리뷰해 보면, `;
+function readOMRPixels(canvas){
+  const w=canvas.width,h=canvas.height;
+  const ctx=canvas.getContext("2d");
+  const img=ctx.getImageData(0,0,w,h);
+  const px=img.data;
+
+  function blackRatio(cx,cy,r){
+    const x1=Math.max(0,Math.round(cx-r)),x2=Math.min(w,Math.round(cx+r));
+    const y1=Math.max(0,Math.round(cy-r)),y2=Math.min(h,Math.round(cy+r));
+    let b=0,t=0;
+    for(let y=y1;y<y2;y++)for(let x=x1;x<x2;x++){t++;if(px[(y*w+x)*4]<128)b++;}
+    return t>0?b/t:0;
   }
 
-  p.push(`${trendText} ${s?.name||"고난도 추론"} 영역에서의 문제 해결력은 눈에 띄게 발전하고 있는 반면, ${w?.name||"기본 계산"} 영역에서의 실수를 줄이는 것이 보완해야 할 주요 과제로 보입니다. 모의고사 최고난도인 30번대 심화 주제들까지 거침없이 다룰 수 있도록, 앞으로도 꼼꼼하고 깊이 있게 풀이를 진행하며 지도하겠습니다.`);
-  
+  const R=Math.min(OMR_GRID.phone.dx*w,OMR_GRID.phone.dy*h)*0.4; // 버블 샘플 반경
+
+  // ── 전화번호 읽기 ──
+  const g=OMR_GRID.phone;
+  const phoneDigits=[];
+  for(let col=0;col<g.cols;col++){
+    const cx=g.x0*w+col*g.dx*w;
+    let best={row:0,val:0};
+    for(let row=0;row<g.rows;row++){
+      const cy=g.y0*h+row*g.dy*h;
+      const v=blackRatio(cx,cy,R);
+      if(v>best.val){best={row,val:v};}
+    }
+    phoneDigits.push(best.row);
+  }
+  const phone=phoneDigits.join("");
+
+  // ── 객관식 읽기 ──
+  const objective={};
+  const objR=Math.min(OMR_GRID.obj1.dx*w,OMR_GRID.obj1.dy*h)*0.35;
+  // 피크 탐지용 소형 반경 & 오프셋 — 원의 1/4만 칠해도 감지
+  const peakR=objR*0.35;
+  const peakOff=objR*0.5;
+  const peakSpots=[[0,0],[-peakOff,0],[peakOff,0],[0,-peakOff],[0,peakOff],[-peakOff*0.7,-peakOff*0.7],[peakOff*0.7,-peakOff*0.7],[-peakOff*0.7,peakOff*0.7],[peakOff*0.7,peakOff*0.7]];
+
+  function readObjGrid(grid,startQ){
+    for(let q=0;q<grid.rows;q++){
+      const cy=grid.y0*h+q*grid.dy*h;
+      let best={ans:null,val:0},second=0;
+      for(let a=0;a<grid.cols;a++){
+        const cx=grid.x0*w+a*grid.dx*w;
+        const v1=blackRatio(cx,cy,objR);
+        let maxPeak=0;
+        for(const[dx,dy]of peakSpots){maxPeak=Math.max(maxPeak,blackRatio(cx+dx,cy+dy,peakR));}
+        // 피크 신호를 0.75 가중치로 반영 — 1/4 마킹(peak≈0.4)이면 0.30으로 변환
+        const v=Math.max(v1,maxPeak*0.75);
+        if(v>best.val){second=best.val;best={ans:a+1,val:v};}
+        else if(v>second)second=v;
+      }
+      if(best.val>0.20&&best.val>second*1.5){
+        objective[String(startQ+q)]=best.ans;
+      }else{
+        objective[String(startQ+q)]=null;
+      }
+    }
+  }
+  readObjGrid(OMR_GRID.obj1,1);
+  readObjGrid(OMR_GRID.obj2,11);
+
+  // ── 단답형 읽기 ──
+  const short_answer={};
+  const sa=OMR_GRID.sa;
+  const saR=Math.min(sa.cdx*w,sa.rdy*h)*0.35;
+  for(let q=0;q<sa.qCount;q++){
+    const qx=sa.bx*w+q*sa.qdx*w;
+    const digits=[];let hasAny=false;
+    for(let col=0;col<sa.cols;col++){
+      const cx=qx+col*sa.cdx*w;
+      let best={row:-1,val:0},second=0;
+      for(let row=0;row<sa.rows;row++){
+        const cy=sa.by*h+row*sa.rdy*h;
+        const v=blackRatio(cx,cy,saR);
+        if(v>best.val){second=best.val;best={row,val:v};}
+        else if(v>second)second=v;
+      }
+      if(best.val>0.20&&best.val>second*1.4){digits.push(String(best.row));hasAny=true;}
+      else{digits.push("");}
+    }
+    if(hasAny){
+      const num=digits.join("").replace(/^0+/,"")||"0";
+      short_answer[String(q+1)]=Number(num);
+    }
+  }
+
+  return{phone,objective,short_answer};
+}
+
+// AI Vision은 이름만 읽기
+async function readNameByVision(b64,key){
+  try{
+    const r=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":key,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
+      body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:200,temperature:0,
+        system:"Read the handwritten Korean name from the 성명 field in this OMR sheet image. Output ONLY the name as plain text, nothing else. If unreadable, output null.",
+        messages:[{role:"user",content:[{type:"image",source:{type:"base64",media_type:"image/png",data:b64}},{type:"text",text:"성명란에 쓰인 이름을 읽어주세요. 이름만 출력하세요."}]}]})});
+    if(!r.ok)return null;
+    const d=await r.json();
+    const t=d.content.filter(i=>i.type==="text").map(i=>i.text).join("").trim();
+    return t==="null"||!t?null:t;
+  }catch(e){return null;}
+}
+
+// 기존 callVision은 삭제하고 새 통합 함수
+async function processOMRPage(pdf,pageNum,key){
+  const canvas=await renderPage(pdf,pageNum);
+
+  // 1) 픽셀 기반: 전화번호 + 객관식 (API 불필요, 정확도 높음)
+  const pixelResult=readOMRPixels(canvas);
+
+  // 2) AI Vision: 이름만 (API 키 있을 때만)
+  let name=null;
+  if(key){
+    const b64=canvas.toDataURL("image/png").split(",")[1];
+    name=await readNameByVision(b64,key);
+  }
+
+  return{phone:pixelResult.phone,name,objective:pixelResult.objective,short_answer:pixelResult.short_answer};
+}
+
+function normalizePhone(raw){
+  if(raw==null)return null;
+  // 숫자든 문자열이든 일단 문자열화, 비숫자 제거
+  let d=String(raw).replace(/[^0-9]/g,"");
+  // "010"으로 시작하면 제거
+  if(d.startsWith("010")&&d.length>=11)d=d.slice(3);
+  // 앞자리 0이 날아간 경우 (7자리 → 8자리로 복원)
+  if(d.length===7)d="0"+d;
+  return d.length===8?d:null;
+}
+function matchStudent(phone,students){
+  const norm=normalizePhone(phone);
+  if(!norm)return null;
+  return students.find(s=>{
+    const sNorm=normalizePhone(s.phone_st);
+    return sNorm&&sNorm===norm;
+  })||null;
+}
+function matchExam(student,exams){if(!student)return null;if(exams.length===1)return exams[0];return exams.find(ex=>student.school&&ex.school&&(student.school.includes(ex.school)||ex.school.includes(student.school)))||exams[0]}
+
+function gradeOMR(omr,exam,qs){
+  if(!exam||!qs)return{wrong:[],score:0,details:[]};
+  const objQs=qs.filter(q=>q.question_type==="선택형").sort((a,b)=>a.question_no-b.question_no);
+  const saQs=qs.filter(q=>q.question_type==="단답형").sort((a,b)=>a.question_no-b.question_no);
+  const essayQs=qs.filter(q=>q.question_type==="서술형");
+  const wrong=[],details=[];
+  objQs.forEach(q=>{const sa=omr.objective?.[String(q.question_no)];const ca=String(q.answer);const ok=sa!=null&&sa!=="multi"&&String(sa)===ca;if(!ok)wrong.push(q.question_no);details.push({no:q.question_no,type:"선택형",answer:ca,student_answer:sa,is_correct:ok,score:q.score,chapter:q.chapter,difficulty:q.difficulty})});
+  saQs.forEach((q,idx)=>{const sa=omr.short_answer?.[String(idx+1)];const ca=String(q.answer).replace(/^0+/,"")||"0";const saStr=sa!=null?String(sa).replace(/^0+/,"")||"0":"";const ok=sa!=null&&saStr===ca;if(!ok)wrong.push(q.question_no);details.push({no:q.question_no,type:"단답형",answer:ca,student_answer:sa,is_correct:ok,score:q.score,chapter:q.chapter,difficulty:q.difficulty})});
+  essayQs.forEach(q=>{details.push({no:q.question_no,type:"서술형",answer:q.answer||"—",student_answer:"—",is_correct:null,score:q.score,chapter:q.chapter,difficulty:q.difficulty})});
+  details.sort((a,b)=>a.no-b.no);
+  const score=details.filter(d=>d.type!=="서술형"&&d.is_correct).reduce((s,d)=>s+Number(d.score),0);
+  return{wrong:wrong.sort((a,b)=>a-b),score:Math.round(score*10)/10,details};
+}
+
+function OmrTab({apiKey}){
+  const[step,setStep]=useState("setup");
+  const[mode,setMode]=useState("scan"); // "scan" or "history"
+  const[exams,setExams]=useState([]);
+  const[selIds,setSelIds]=useState(new Set());
+  const[progress,setProgress]=useState({cur:0,total:0,msg:""});
+  const[results,setResults]=useState([]);
+  const[error,setError]=useState(null);
+  const[saving,setSaving]=useState(false);
+  const[toast,setToast]=useState("");
+  const[expandedIdx,setExpandedIdx]=useState(null);
+  const[allStudentsState,setAllStudentsState]=useState([]);
+  const[selectedExamsState,setSelectedExamsState]=useState([]);
+  const[qMapState,setQMapState]=useState({});
+  // 서술형 채점 (OMR 리뷰 화면에서 인라인 채점)
+  const[essayScores,setEssayScores]=useState({}); // key: `${studentId}-${questionNo}`, value: score
+  const setEssayScore=(studentId,qno,v)=>{setEssayScores(p=>({...p,[`${studentId}-${qno}`]:v}))};
+  // 채점 현황용
+  const[histExam,setHistExam]=useState(null);
+  const[histResults,setHistResults]=useState([]);
+  const[histQs,setHistQs]=useState([]);
+  const[histExpanded,setHistExpanded]=useState(null);
+  const[histSaving,setHistSaving]=useState(false);
+
+  useEffect(()=>{if(step==="setup")sbGet("exams?status=eq.approved&order=created_at.desc").then(setExams).catch(e=>setError(e.message))},[step]);
+
+  const toggleExam=id=>{setSelIds(prev=>{const n=new Set(prev);n.has(id)?n.delete(id):n.add(id);return n})};
+
+  // ── 채점 현황 로드 ──
+  const loadHistory=async ex=>{
+    setHistExam(ex);setError(null);
+    try{
+      const[qs,students,resArr,subArr]=await Promise.all([
+        sbGet(`exam_questions?exam_id=eq.${ex.id}&order=question_no`),
+        sbGet(`students?class_name=eq.${encodeURIComponent(ex.class_name)}&order=name`),
+        sbGet(`exam_results?exam_id=eq.${ex.id}`),
+        sbGet(`exam_subjective?exam_id=eq.${ex.id}`),
+      ]);
+      setHistQs(qs);
+      const resMap={};resArr.forEach(r=>{resMap[r.student_id]=r});
+      const subMap={};subArr.forEach(s=>{subMap[`${s.student_id}-${s.question_no}`]=s.partial_score});
+
+      const built=students.filter(s=>resMap[s.id]).map(s=>{
+        const res=resMap[s.id];const wq=res.wrong_questions||[];
+        const omrGraded=res.omr_graded===true;
+        const details=qs.map(q=>{
+          const isWrong=wq.includes(q.question_no);
+          if(q.question_type==="서술형"){
+            const ps=subMap[`${s.id}-${q.question_no}`];
+            return{no:q.question_no,type:"서술형",answer:q.answer||"—",student_answer:ps!=null?ps:"—",is_correct:ps!=null?(ps>=Number(q.score)):null,partial_score:ps,score:q.score,chapter:q.chapter,difficulty:q.difficulty};
+          }
+          // OMR 미채점이면 비서술형도 is_correct=null 처리 (전부 정답 방지)
+          const correct=omrGraded?!isWrong:null;
+          return{no:q.question_no,type:q.question_type,answer:String(q.answer),student_answer:omrGraded?(isWrong?"오답":"정답"):"미채점",is_correct:correct,score:q.score,chapter:q.chapter,difficulty:q.difficulty};
+        });
+        const omrPts=omrGraded?details.filter(d=>d.type!=="서술형"&&d.is_correct===true).reduce((s,d)=>s+Number(d.score),0):0;
+        const essayPts=details.filter(d=>d.type==="서술형"&&d.partial_score!=null).reduce((s,d)=>s+d.partial_score,0);
+        const calcScore=Math.round((omrPts+essayPts)*10)/10;
+        return{student:s,exam:ex,wrong:wq,score:calcScore,omr_graded:omrGraded,sub_graded:res.sub_graded,details};
+      });
+      setHistResults(built);setStep("history");
+    }catch(e){setError(e.message)}
+  };
+
+  // ── 채점 현황에서 오답 토글 ──
+  const toggleWrong=(ri,di)=>{
+    setHistResults(prev=>{
+      const next=[...prev];const r={...next[ri]};const d=[...r.details];const item={...d[di]};
+      if(item.type==="서술형")return prev;
+      item.is_correct=!item.is_correct;item.student_answer=item.is_correct?"정답":"오답";d[di]=item;
+      r.details=d;r.wrong=d.filter(x=>x.type!=="서술형"&&!x.is_correct).map(x=>x.no).sort((a,b)=>a-b);
+      const essayScore=d.filter(x=>x.type==="서술형"&&x.partial_score!=null).reduce((s,x)=>s+x.partial_score,0);
+      const omrScore=d.filter(x=>x.type!=="서술형"&&x.is_correct).reduce((s,x)=>s+Number(x.score),0);
+      r.score=Math.round((omrScore+essayScore)*10)/10;
+      next[ri]=r;return next;
+    });
+  };
+
+  // ── 채점 현황 저장 ──
+  const saveHistResult=async ri=>{
+    setHistSaving(true);
+    try{
+      const r=histResults[ri];
+      // 서술형 점수 저장
+      const essayDetails=r.details.filter(d=>d.type==="서술형"&&d.partial_score!=null);
+      if(essayDetails.length>0){
+        const subRows=essayDetails.map(d=>({exam_id:r.exam.id,student_id:r.student.id,question_no:d.no,is_correct:d.partial_score>=Number(d.score),partial_score:d.partial_score,graded_at:new Date().toISOString()}));
+        await sbUpsert("exam_subjective",subRows,"exam_id,student_id,question_no");
+      }
+      const subGraded=r.details.filter(d=>d.type==="서술형").every(d=>d.partial_score!=null);
+      await sbUpsert("exam_results",[{exam_id:r.exam.id,student_id:r.student.id,wrong_questions:r.wrong,total_score:r.score,omr_graded:true,sub_graded:subGraded,graded_at:new Date().toISOString()}],"exam_id,student_id");
+      setToast(`${r.student.name} 저장 완료 (${r.score}점)`);setTimeout(()=>setToast(""),2500);
+    }catch(e){setError(e.message)}finally{setHistSaving(false)}
+  };
+
+  // ── 채점 현황에서 학생 결과 삭제 ──
+  const[confirmHistDel,setConfirmHistDel]=useState(null);
+  const deleteHistResult=async ri=>{
+    setHistSaving(true);
+    try{
+      const r=histResults[ri];
+      await sbDelete("exam_subjective",`exam_id=eq.${r.exam.id}&student_id=eq.${r.student.id}`);
+      await sbDelete("exam_results",`exam_id=eq.${r.exam.id}&student_id=eq.${r.student.id}`);
+      setHistResults(prev=>prev.filter((_,i)=>i!==ri));
+      setConfirmHistDel(null);setHistExpanded(null);
+      setToast(`${r.student.name} 채점 데이터 삭제 완료`);setTimeout(()=>setToast(""),2500);
+    }catch(e){setError(e.message)}finally{setHistSaving(false)}
+  };
+
+  // ── 채점 현황에서 학생 변경 (중복 이름 등 잘못 매칭된 경우) ──
+  const[histReassign,setHistReassign]=useState({}); // {ri: studentId}
+  const[histAllStudents,setHistAllStudents]=useState([]);
+  useEffect(()=>{
+    if(step==="history"&&histExam){
+      sbGet(`students?class_name=eq.${encodeURIComponent(histExam.class_name)}&order=name`).then(setHistAllStudents).catch(()=>{});
+    }
+  },[step,histExam]);
+
+  const reassignHistStudent=async ri=>{
+    const newStudentId=histReassign[ri];
+    if(!newStudentId)return;
+    const newStudent=histAllStudents.find(s=>String(s.id)===String(newStudentId));
+    if(!newStudent)return;
+    setHistSaving(true);
+    try{
+      const r=histResults[ri];
+      // 기존 학생 데이터 삭제
+      await sbDelete("exam_subjective",`exam_id=eq.${r.exam.id}&student_id=eq.${r.student.id}`);
+      await sbDelete("exam_results",`exam_id=eq.${r.exam.id}&student_id=eq.${r.student.id}`);
+      // 새 학생으로 저장
+      await sbUpsert("exam_results",[{exam_id:r.exam.id,student_id:newStudent.id,wrong_questions:r.wrong,total_score:r.score,omr_graded:r.omr_graded||true,sub_graded:r.sub_graded||false,graded_at:new Date().toISOString()}],"exam_id,student_id");
+      // 서술형 점수가 있으면 새 학생으로 이동
+      const subRows=r.details.filter(d=>d.type==="서술형"&&d.partial_score!=null).map(d=>({exam_id:r.exam.id,student_id:newStudent.id,question_no:d.no,is_correct:d.partial_score>=Number(d.score),partial_score:d.partial_score,graded_at:new Date().toISOString()}));
+      if(subRows.length>0)await sbUpsert("exam_subjective",subRows,"exam_id,student_id,question_no");
+      // UI 업데이트
+      setHistResults(prev=>{const next=[...prev];next[ri]={...next[ri],student:newStudent};return next});
+      setHistReassign(p=>{const n={...p};delete n[ri];return n});
+      setToast(`${r.student.name} → ${newStudent.name}으로 변경 완료`);setTimeout(()=>setToast(""),3000);
+    }catch(e){setError(e.message)}finally{setHistSaving(false)}
+  };
+
+  const handleUpload=useCallback(async e=>{
+    const file=e.target.files?.[0];if(!file)return;
+    if(apiKey.trim())localStorage.setItem("anthropic_key",apiKey.trim()); // API키 있으면 저장 (이름 읽기용)
+    if(selIds.size===0){setError("시험을 선택해 주세요");return}
+    setError(null);setStep("processing");setProgress({cur:0,total:0,msg:"PDF를 읽고 있습니다..."});
+    try{
+      const selectedExams=exams.filter(ex=>selIds.has(ex.id));
+      const classNames=[...new Set(selectedExams.map(ex=>ex.class_name))];
+      setProgress(p=>({...p,msg:"학생·문항 정보를 불러오고 있습니다..."}));
+      const[allStudents,...qArrays]=await Promise.all([
+        Promise.all(classNames.map(cn=>sbGet(`students?class_name=eq.${encodeURIComponent(cn)}&order=name`))).then(a=>a.flat()),
+        ...selectedExams.map(ex=>sbGet(`exam_questions?exam_id=eq.${ex.id}&order=question_no`))]);
+      const qMap={};selectedExams.forEach((ex,i)=>{qMap[ex.id]=qArrays[i]});
+      setAllStudentsState(allStudents);setSelectedExamsState(selectedExams);setQMapState(qMap);
+
+      // 선택된 시험의 학교명으로 OMR 그리드 프로필 자동 선택
+      const schools=[...new Set(selectedExams.map(ex=>ex.school).filter(Boolean))];
+      OMR_GRID=getOMRGrid(schools[0]||null);
+      console.log(`OMR 그리드 프로필: ${schools[0]||"default"}`,OMR_GRID.obj1);
+
+      const buf=await file.arrayBuffer();const pdf=await pdfjsLib.getDocument({data:buf}).promise;const totalPages=pdf.numPages;
+      const omrPages=[];for(let p=1;p<=totalPages;p+=2)omrPages.push(p);
+      const total=omrPages.length;
+      setProgress({cur:0,total,msg:`총 ${total}명분 OMR 처리 시작... (${totalPages}p 중 앞면만)`});
+
+      const allResults=[];const BATCH=5;
+      for(let i=0;i<total;i+=BATCH){
+        const batch=omrPages.slice(i,i+BATCH);
+        const br=await Promise.all(batch.map(async pn=>{
+          try{
+            const omr=await processOMRPage(pdf,pn,apiKey.trim());
+            if(omr.error)return{page:pn,status:"error",msg:"OMR 인식 불가",omr:{}};
+            const student=matchStudent(omr.phone,allStudents);const exam=student?matchExam(student,selectedExams):null;
+            const grade=exam?gradeOMR(omr,exam,qMap[exam.id]):null;
+            return{page:pn,status:student?"matched":"unmatched",phone:omr.phone,name:omr.name,student,exam,omr,wrong:grade?.wrong||[],score:grade?.score||0,details:grade?.details||[]};
+          }catch(err){return{page:pn,status:"error",msg:err.message,omr:{}}}
+        }));
+        allResults.push(...br);setProgress({cur:Math.min(i+BATCH,total),total,msg:`${Math.min(i+BATCH,total)}/${total}명 완료`});
+      }
+      setResults(allResults.sort((a,b)=>a.page-b.page));setStep("review");
+    }catch(err){setError(`처리 실패: ${err.message}`);setStep("setup")}
+  },[apiKey,selIds,exams]);
+
+  const fixAnswer=(ri,di,nv)=>{setResults(prev=>{const next=[...prev];const r={...next[ri]};const d=[...r.details];d[di]={...d[di],student_answer:nv};
+    d[di].is_correct=nv!=null&&String(nv)===String(d[di].answer);
+    r.details=d;r.wrong=d.filter(x=>x.type!=="서술형"&&!x.is_correct).map(x=>x.no).sort((a,b)=>a-b);
+    r.score=Math.round(d.filter(x=>x.type!=="서술형"&&x.is_correct).reduce((s,x)=>s+Number(x.score),0)*10)/10;
+    next[ri]=r;return next})};
+
+  const[manualSel,setManualSel]=useState({}); // {ri: studentId}
+
+  const manualMatch=(ri)=>{
+    const studentId=manualSel[ri];
+    if(!studentId){alert("학생을 선택해 주세요");return}
+    const student=allStudentsState.find(s=>String(s.id)===String(studentId));
+    if(!student){alert("학생을 찾을 수 없습니다");return}
+    const exam=selectedExamsState.length===1?selectedExamsState[0]:matchExam(student,selectedExamsState);
+    if(!exam){alert("시험을 매칭할 수 없습니다");return}
+    const qs=qMapState[exam.id];
+    if(!qs||qs.length===0){alert("문항 정보가 없습니다");return}
+
+    const r=results[ri];
+    const omrData={objective:r.omr?.objective||r.objective||{},short_answer:r.omr?.short_answer||r.short_answer||{}};
+    const grade=gradeOMR(omrData,exam,qs);
+
+    const updated=[...results];
+    updated[ri]={...updated[ri],student,exam,status:"matched",wrong:grade.wrong,score:grade.score,details:grade.details};
+    setResults(updated);
+    setToast(`${student.name} 매칭·채점 완료 (${grade.score}점)`);setTimeout(()=>setToast(""),3000);
+  };
+
+  const[absentStudents,setAbsentStudents]=useState([]);
+  const handleSave=async()=>{
+    setSaving(true);setError(null);
+    try{
+      const matched=results.filter(r=>r.status==="matched"&&r.student&&r.exam);
+
+      for(const r of matched){
+        const qs=qMapState[r.exam.id]||[];
+        const essayQs=qs.filter(q=>q.question_type==="서술형");
+
+        // 서술형 점수 합산
+        let essayPts=0;let subGraded=essayQs.length===0;
+        if(essayQs.length>0){
+          const subRows=essayQs.map(q=>{
+            const ps=essayScores[`${r.student.id}-${q.question_no}`];
+            return{exam_id:r.exam.id,student_id:r.student.id,question_no:q.question_no,is_correct:ps!=null?(ps>=Number(q.score)):null,partial_score:ps!=null?ps:null,graded_at:new Date().toISOString()};
+          });
+          await sbUpsert("exam_subjective",subRows,"exam_id,student_id,question_no");
+          essayPts=essayQs.reduce((s,q)=>{const ps=essayScores[`${r.student.id}-${q.question_no}`];return s+(ps!=null?ps:0)},0);
+          subGraded=essayQs.every(q=>essayScores[`${r.student.id}-${q.question_no}`]!=null);
+        }
+
+        const totalScore=Math.round((r.score+essayPts)*10)/10;
+        await sbUpsert("exam_results",[{exam_id:r.exam.id,student_id:r.student.id,wrong_questions:r.wrong,total_score:totalScore,omr_graded:true,sub_graded:subGraded,graded_at:new Date().toISOString()}],"exam_id,student_id");
+      }
+
+      // 결석 학생 판별
+      const matchedIds=new Set(matched.map(r=>r.student?.id).filter(Boolean));
+      const absent=allStudentsState.filter(s=>!matchedIds.has(s.id));
+      setAbsentStudents(absent);
+
+      setToast(`${matched.length}명 저장 · 결석 ${absent.length}명`);setStep("saved");
+    }catch(err){setError(`저장 실패: ${err.message}`)}finally{setSaving(false)}
+  };
+
+  // 개별 학생 저장
+  const[savedSet,setSavedSet]=useState(new Set());
+  const saveOneStudent=async(ri)=>{
+    const r=results[ri];
+    if(r.status!=="matched"||!r.student||!r.exam)return;
+    setSaving(true);
+    try{
+      const qs=qMapState[r.exam.id]||[];
+      const essayQs=qs.filter(q=>q.question_type==="서술형");
+      let essayPts=0;let subGraded=essayQs.length===0;
+
+      if(essayQs.length>0){
+        const subRows=essayQs.map(q=>{
+          const ps=essayScores[`${r.student.id}-${q.question_no}`];
+          return{exam_id:r.exam.id,student_id:r.student.id,question_no:q.question_no,is_correct:ps!=null?(ps>=Number(q.score)):null,partial_score:ps!=null?ps:null,graded_at:new Date().toISOString()};
+        });
+        await sbUpsert("exam_subjective",subRows,"exam_id,student_id,question_no");
+        essayPts=essayQs.reduce((s,q)=>{const ps=essayScores[`${r.student.id}-${q.question_no}`];return s+(ps!=null?ps:0)},0);
+        subGraded=essayQs.every(q=>essayScores[`${r.student.id}-${q.question_no}`]!=null);
+      }
+
+      const totalScore=Math.round((r.score+essayPts)*10)/10;
+      await sbUpsert("exam_results",[{exam_id:r.exam.id,student_id:r.student.id,wrong_questions:r.wrong,total_score:totalScore,omr_graded:true,sub_graded:subGraded,graded_at:new Date().toISOString()}],"exam_id,student_id");
+      setSavedSet(prev=>{const next=new Set(prev);next.add(ri);return next});
+      setToast(`${r.student.name} 저장 (OMR ${r.score}+서술형 ${essayPts}=${totalScore}점)`);setTimeout(()=>setToast(""),3000);
+    }catch(err){setError(`저장 실패: ${err.message}`)}finally{setSaving(false)}
+  };
+
+  const matched=results.filter(r=>r.status==="matched"),unmatched=results.filter(r=>r.status==="unmatched"),errors=results.filter(r=>r.status==="error");
+
+  // ────── SETUP ──────
+  if(step==="setup")return(
+    <div style={{padding:20,maxWidth:600,margin:"0 auto"}}>
+      {error&&<div className="err-box">{error}</div>}
+      {toast&&<div className="toast-box">{toast}</div>}
+
+      {/* 모드 토글 */}
+      <div style={{display:"flex",gap:6,marginBottom:16}}>
+        {[{id:"scan",label:"📋 새 OMR 채점"},{id:"history",label:"📊 채점 현황"}].map(m=>(
+          <button key={m.id} onClick={()=>setMode(m.id)} style={{flex:1,padding:"12px 8px",fontSize:14,fontWeight:700,border:"none",borderRadius:10,cursor:"pointer",
+            background:mode===m.id?"#2B4A6F":"white",color:mode===m.id?"white":"#888",boxShadow:mode===m.id?"0 2px 8px rgba(43,74,111,0.3)":"0 1px 4px rgba(0,0,0,0.04)"}}>{m.label}</button>
+        ))}
+      </div>
+
+      {mode==="scan"&&<>
+        <div className="card"><div style={{fontSize:11,fontWeight:700,color:"#888",marginBottom:10}}>채점할 시험 선택</div>
+          {exams.length===0?<div style={{fontSize:13,color:"#999",padding:"12px 0"}}>등록된 시험이 없습니다</div>:
+          exams.map(ex=>(
+            <label key={ex.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderRadius:10,cursor:"pointer",background:selIds.has(ex.id)?"#EFF6FF":"transparent",marginBottom:4,border:selIds.has(ex.id)?"1.5px solid #3B82F6":"1.5px solid #F0F0F0"}}>
+              <input type="checkbox" checked={selIds.has(ex.id)} onChange={()=>toggleExam(ex.id)} style={{width:18,height:18,accentColor:"#2B4A6F"}}/>
+              <div style={{flex:1}}><div style={{fontSize:14,fontWeight:600,color:"#1A2F4A"}}>{ex.title}</div><div style={{fontSize:11,color:"#999",marginTop:2}}>{ex.school} · {ex.class_name}</div></div>
+            </label>
+          ))}</div>
+        <label style={{display:"block",border:"2px dashed #CCC",borderRadius:14,padding:"32px 20px",textAlign:"center",cursor:"pointer",background:"white"}}
+          onMouseOver={e=>e.currentTarget.style.borderColor="#2B4A6F"} onMouseOut={e=>e.currentTarget.style.borderColor="#CCC"}>
+          <input type="file" accept=".pdf" onChange={handleUpload} style={{display:"none"}}/>
+          <div style={{fontSize:32,marginBottom:8}}>📋</div>
+          <div style={{fontSize:14,fontWeight:600,color:"#333"}}>스캔 PDF 업로드</div>
+          <div style={{fontSize:12,color:"#999",marginTop:4}}>복합기에서 스캔한 OMR 묶음 PDF</div>
+        </label>
+      </>}
+
+      {mode==="history"&&<>
+        <div className="card"><div style={{fontSize:11,fontWeight:700,color:"#888",marginBottom:10}}>시험 선택하여 채점 현황 보기</div>
+          {exams.length===0?<div style={{fontSize:13,color:"#999",padding:"12px 0"}}>등록된 시험이 없습니다</div>:
+          exams.map(ex=>(
+            <button key={ex.id} onClick={()=>loadHistory(ex)} style={{display:"flex",width:"100%",alignItems:"center",justifyContent:"space-between",padding:"14px 16px",borderRadius:10,border:"1.5px solid #EAEAEA",background:"white",cursor:"pointer",marginBottom:6,textAlign:"left"}}>
+              <div><div style={{fontSize:14,fontWeight:600,color:"#1A2F4A"}}>{ex.title}</div><div style={{fontSize:11,color:"#999",marginTop:2}}>{ex.school} · {ex.class_name}</div></div>
+              <span style={{fontSize:20,color:"#CCC"}}>→</span>
+            </button>
+          ))}
+        </div>
+      </>}
+    </div>
+  );
+
+  // ────── PROCESSING ──────
+  if(step==="processing")return(
+    <div style={{padding:40,textAlign:"center"}}>
+      <div style={{width:40,height:40,border:"4px solid #E5E5E5",borderTopColor:"#2B4A6F",borderRadius:"50%",margin:"0 auto 16px",animation:"spin 1s linear infinite"}}/>
+      <div style={{fontSize:15,fontWeight:700,color:"#1A2F4A"}}>{progress.msg}</div>
+      {progress.total>0&&<><div className="prog-bar" style={{maxWidth:300,margin:"12px auto 0"}}><div className="prog-fill" style={{width:`${(progress.cur/progress.total)*100}%`}}/></div>
+        <div style={{fontSize:12,color:"#BBB",marginTop:8}}>{progress.cur}/{progress.total}</div></>}
+    </div>
+  );
+
+  // ────── SAVED ──────
+  if(step==="saved")return(
+    <div style={{padding:40,textAlign:"center"}}>
+      <div style={{fontSize:48,marginBottom:12}}>✅</div>
+      <h2 style={{fontSize:20,fontWeight:800,color:"#1A2F4A",marginBottom:6}}>OMR 등록 완료</h2>
+      <p style={{fontSize:14,color:"#888",marginBottom:4}}>{matched.length}명 저장 (OMR + 서술형 합산)</p>
+      {unmatched.length>0&&<p style={{fontSize:12,color:"#F59E0B"}}>미매칭 {unmatched.length}건</p>}
+      {absentStudents.length>0&&<div style={{marginTop:12,padding:"12px 18px",background:"#FEF2F2",borderRadius:12,display:"inline-block",textAlign:"left"}}>
+        <div style={{fontSize:12,fontWeight:700,color:"#EF4444",marginBottom:6}}>결석 {absentStudents.length}명</div>
+        <div style={{fontSize:13,color:"#666"}}>{absentStudents.map(s=>s.name).join(", ")}</div>
+      </div>}
+      <p style={{fontSize:13,color:"#999",marginTop:16,marginBottom:24}}>분석 탭에서 리포트를 확인하세요</p>
+      <button onClick={()=>{setStep("setup");setResults([]);setSelIds(new Set());setAbsentStudents([]);setEssayScores({})}} className="btn-primary">새 OMR 등록</button>
+    </div>
+  );
+
+  // ────── HISTORY (채점 현황) ──────
+  if(step==="history")return(
+    <div style={{padding:"16px 16px 80px",maxWidth:800,margin:"0 auto"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+        <div><div style={{fontSize:18,fontWeight:800,color:"#1A2F4A"}}>{histExam?.title}</div>
+          <div style={{fontSize:12,color:"#999"}}>{histExam?.school} · {histResults.length}명 채점됨</div></div>
+        <button onClick={()=>{setStep("setup");setHistResults([]);setHistExam(null);setMode("history")}} style={{padding:"8px 14px",fontSize:12,background:"white",color:"#666",border:"1px solid #DDD",borderRadius:8,cursor:"pointer"}}>← 목록</button>
+      </div>
+      {error&&<div className="err-box">{error}</div>}
+      {toast&&<div className="toast-box">{toast}</div>}
+
+      {histResults.length===0?<div className="card" style={{textAlign:"center",color:"#999",padding:40}}>채점된 학생이 없습니다</div>:
+      <>
+        {/* 요약 */}
+        <div style={{display:"flex",gap:10,marginBottom:14,flexWrap:"wrap"}}>
+          <div style={{flex:1,minWidth:80,background:"white",borderRadius:12,padding:"14px 12px",textAlign:"center",border:"1px solid #E5E7EB"}}>
+            <div style={{fontSize:22,fontWeight:800,color:"#2B4A6F"}}>{Math.round(histResults.reduce((s,r)=>s+r.score,0)/histResults.length*10)/10}</div>
+            <div style={{fontSize:10,color:"#888",marginTop:2}}>평균</div></div>
+          <div style={{flex:1,minWidth:80,background:"#F0FDF4",borderRadius:12,padding:"14px 12px",textAlign:"center"}}>
+            <div style={{fontSize:22,fontWeight:800,color:"#22C55E"}}>{Math.max(...histResults.map(r=>r.score))}</div>
+            <div style={{fontSize:10,color:"#888",marginTop:2}}>최고점</div></div>
+          <div style={{flex:1,minWidth:80,background:"#FEF2F2",borderRadius:12,padding:"14px 12px",textAlign:"center"}}>
+            <div style={{fontSize:22,fontWeight:800,color:"#EF4444"}}>{Math.min(...histResults.map(r=>r.score))}</div>
+            <div style={{fontSize:10,color:"#888",marginTop:2}}>최저점</div></div>
+        </div>
+
+        {/* 학생 리스트 */}
+        <div style={{background:"white",borderRadius:14,overflow:"hidden",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}>
+          {histResults.map((r,ri)=>{const isOpen=histExpanded===ri;
+            const omrScore=r.details.filter(d=>d.type!=="서술형"&&d.is_correct).reduce((s,d)=>s+Number(d.score),0);
+            const essayMax=r.details.filter(d=>d.type==="서술형").reduce((s,d)=>s+Number(d.score),0);
+            const essayScore=r.details.filter(d=>d.type==="서술형"&&d.partial_score!=null).reduce((s,d)=>s+d.partial_score,0);
+            const essayDone=r.details.filter(d=>d.type==="서술형").every(d=>d.partial_score!=null);
+            const hasEssay=r.details.some(d=>d.type==="서술형");
+            return<div key={ri} style={{borderBottom:"1px solid #F5F5F5"}}>
+              <div onClick={()=>setHistExpanded(isOpen?null:ri)} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 16px",cursor:"pointer",background:hasEssay&&!essayDone?"#FFFDF5":"white"}}>
+                <div style={{width:30,height:30,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",
+                  background:hasEssay&&!essayDone?"#FEF3C7":"#F0FDF4",color:hasEssay&&!essayDone?"#D97706":"#22C55E",fontSize:12,fontWeight:800}}>
+                  {hasEssay&&!essayDone?"⏳":"✓"}</div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:14,fontWeight:600,color:"#1A2F4A"}}>{r.student.name}</div>
+                  <div style={{fontSize:11,color:"#999",display:"flex",flexWrap:"wrap",gap:4,alignItems:"center"}}>
+                    {r.student.school}
+                    <span style={{padding:"1px 6px",borderRadius:8,background:"#E3F2FD",color:"#1565C0",fontSize:10,fontWeight:600}}>OMR {Math.round(omrScore*10)/10}점</span>
+                    {hasEssay&&(essayDone?
+                      <span style={{padding:"1px 6px",borderRadius:8,background:"#FCE4EC",color:"#C62828",fontSize:10,fontWeight:600}}>서술형 {essayScore}/{essayMax}점</span>:
+                      <span style={{padding:"1px 6px",borderRadius:8,background:"#FEF3C7",color:"#D97706",fontSize:10,fontWeight:600}}>서술형 미채점</span>
+                    )}
+                  </div>
+                </div>
+                <div style={{textAlign:"right"}}>
+                  <div style={{fontSize:18,fontWeight:800,color:hasEssay&&!essayDone?"#D97706":"#2B4A6F"}}>{r.score}<span style={{fontSize:11,color:"#999"}}>점</span></div>
+                  {hasEssay&&!essayDone&&<div style={{fontSize:9,color:"#D97706"}}>서술형 미반영</div>}
+                </div>
+                <span style={{fontSize:16,color:"#CCC",transform:isOpen?"rotate(90deg)":"none",transition:"0.2s"}}>›</span>
+              </div>
+              {isOpen&&<div style={{padding:"8px 16px 14px",background:"#FAFAFA"}}>
+                <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,marginTop:4}}>
+                  <thead><tr style={{background:"#F0F0F0"}}>{["#","유형","정답","상태","배점","결과",""].map(h=><th key={h} style={{padding:"7px 8px",textAlign:"left",fontWeight:700,color:"#888",fontSize:10}}>{h}</th>)}</tr></thead>
+                  <tbody>{r.details.map((d,di)=>{
+                    if(d.type==="서술형"){
+                      const max=Number(d.score);const steps=[];for(let i=0;i<=max;i++)steps.push(i);
+                      const curPs=d.partial_score;
+                      return<tr key={di} style={{background:curPs!=null?(curPs===0?"#FEF2F2":curPs>=max?"#F0FDF4":"#EFF6FF"):"#FFFBEB"}}>
+                        <td style={{padding:"6px 8px",fontWeight:700,color:"#C62828"}}>{d.no}</td>
+                        <td style={{padding:"6px 8px"}}><Badge value={d.type} map={typeMap}/></td>
+                        <td style={{padding:"6px 8px",fontWeight:600,fontSize:11}}>{d.answer}</td>
+                        <td style={{padding:"6px 4px"}} colSpan={3}>
+                          <div style={{display:"flex",gap:3,flexWrap:"wrap",alignItems:"center"}}>
+                            {steps.map(v=><button key={v} onClick={()=>{
+                              setHistResults(prev=>{const next=[...prev];const rr={...next[ri]};const dd=[...rr.details];dd[di]={...dd[di],partial_score:v};
+                                rr.details=dd;const ep=dd.filter(x=>x.type==="서술형"&&x.partial_score!=null).reduce((s,x)=>s+x.partial_score,0);
+                                const op=dd.filter(x=>x.type!=="서술형"&&x.is_correct).reduce((s,x)=>s+Number(x.score),0);
+                                rr.score=Math.round((op+ep)*10)/10;next[ri]=rr;return next});
+                            }} style={{minWidth:28,height:24,borderRadius:5,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,
+                              background:curPs===v?(v===0?"#EF4444":v===max?"#22C55E":"#3B82F6"):"#F0F0F0",
+                              color:curPs===v?"white":"#888"}}>{v}</button>)}
+                            <input type="number" step="0.5" min="0" max={max} value={curPs!=null&&!steps.includes(curPs)?curPs:""}
+                              placeholder="·" onChange={e=>{const val=parseFloat(e.target.value);if(!isNaN(val)&&val>=0&&val<=max){
+                                setHistResults(prev=>{const next=[...prev];const rr={...next[ri]};const dd=[...rr.details];dd[di]={...dd[di],partial_score:val};
+                                  rr.details=dd;const ep=dd.filter(x=>x.type==="서술형"&&x.partial_score!=null).reduce((s,x)=>s+x.partial_score,0);
+                                  const op=dd.filter(x=>x.type!=="서술형"&&x.is_correct).reduce((s,x)=>s+Number(x.score),0);
+                                  rr.score=Math.round((op+ep)*10)/10;next[ri]=rr;return next});
+                              }}} style={{width:36,height:24,borderRadius:5,border:"1.5px solid #DDD",textAlign:"center",fontSize:11,outline:"none"}}/>
+                          </div>
+                        </td>
+                        <td style={{padding:"6px 8px",fontSize:12,fontWeight:800,color:curPs!=null?(curPs===0?"#EF4444":"#22C55E"):"#D97706"}}>
+                          {curPs!=null?`${curPs}/${max}`:"미채점"}</td>
+                      </tr>;
+                    }
+                    return<tr key={di} style={{background:d.is_correct===false?"#FEF2F2":"white"}}>
+                    <td style={{padding:"6px 8px",fontWeight:700,color:"#2B4A6F"}}>{d.no}</td>
+                    <td style={{padding:"6px 8px"}}><Badge value={d.type} map={typeMap}/></td>
+                    <td style={{padding:"6px 8px",fontWeight:600}}>{d.answer}</td>
+                    <td style={{padding:"6px 8px",fontSize:12,color:d.is_correct?"#22C55E":"#EF4444",fontWeight:600}}>
+                      {d.is_correct?"정답":"오답"}
+                    </td>
+                    <td style={{padding:"6px 8px",color:"#888"}}>{d.score}</td>
+                    <td style={{padding:"6px 8px",fontSize:14,fontWeight:800,color:d.is_correct?"#22C55E":"#EF4444"}}>{d.is_correct?"✓":"✗"}</td>
+                    <td style={{padding:"6px 8px"}}><button onClick={()=>toggleWrong(ri,di)} style={{padding:"3px 8px",fontSize:10,fontWeight:600,border:"1px solid #DDD",borderRadius:6,cursor:"pointer",background:d.is_correct?"#FEF2F2":"#F0FDF4",color:d.is_correct?"#EF4444":"#22C55E"}}>{d.is_correct?"오답으로":"정답으로"}</button></td>
+                  </tr>;
+                  })}</tbody>
+                </table>
+                <button onClick={()=>saveHistResult(ri)} disabled={histSaving} style={{marginTop:10,padding:"8px 20px",fontSize:12,fontWeight:600,background:"#2B4A6F",color:"white",border:"none",borderRadius:8,cursor:"pointer",width:"100%"}}>{histSaving?"저장 중...":"수정 저장"}</button>
+
+                {/* 학생 변경 (잘못 매칭된 경우) */}
+                <div style={{marginTop:10,padding:"10px 14px",background:"#F8F9FA",borderRadius:10,border:"1px solid #EAEAEA"}}>
+                  <div style={{fontSize:11,fontWeight:700,color:"#888",marginBottom:6}}>학생 변경 (잘못 매칭된 경우)</div>
+                  <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                    <select value={histReassign[ri]||""} onChange={e=>setHistReassign(p=>({...p,[ri]:e.target.value}))}
+                      style={{flex:1,padding:"7px 10px",fontSize:12,border:"1.5px solid #DDD",borderRadius:8}}>
+                      <option value="">다른 학생 선택...</option>
+                      {histAllStudents.filter(s=>s.id!==r.student.id).map(s=>(
+                        <option key={s.id} value={s.id}>{s.name} — 010{(s.phone_st||"").replace(/^010/,"")}</option>
+                      ))}
+                    </select>
+                    <button onClick={()=>reassignHistStudent(ri)} disabled={histSaving||!histReassign[ri]}
+                      style={{padding:"7px 14px",fontSize:12,fontWeight:600,background:histReassign[ri]?"#2B4A6F":"#CCC",color:"white",border:"none",borderRadius:8,cursor:histReassign[ri]?"pointer":"default",whiteSpace:"nowrap"}}>변경</button>
+                  </div>
+                </div>
+
+                {/* 삭제 */}
+                <div style={{marginTop:8,textAlign:"right"}}>
+                  {confirmHistDel===ri?(
+                    <span style={{display:"inline-flex",gap:6,alignItems:"center"}}>
+                      <span style={{fontSize:11,color:"#EF4444",fontWeight:600}}>정말 삭제하시겠습니까?</span>
+                      <button onClick={()=>deleteHistResult(ri)} disabled={histSaving}
+                        style={{padding:"5px 12px",fontSize:11,fontWeight:700,background:"#EF4444",color:"white",border:"none",borderRadius:6,cursor:"pointer"}}>
+                        {histSaving?"삭제 중...":"확인"}</button>
+                      <button onClick={()=>setConfirmHistDel(null)}
+                        style={{padding:"5px 10px",fontSize:11,background:"#F0F0F0",color:"#666",border:"none",borderRadius:6,cursor:"pointer"}}>취소</button>
+                    </span>
+                  ):(
+                    <button onClick={()=>setConfirmHistDel(ri)}
+                      style={{padding:"5px 14px",fontSize:11,fontWeight:600,background:"#FEF2F2",color:"#EF4444",border:"1px solid #FECACA",borderRadius:6,cursor:"pointer"}}>이 학생 채점 삭제</button>
+                  )}
+                </div>
+              </div>}
+            </div>})}
+        </div>
+      </>}
+    </div>
+  );
+
+  // ────── REVIEW (OMR 스캔 결과) ──────
+  return(
+    <div style={{padding:"16px 16px 80px",maxWidth:800,margin:"0 auto"}}>
+      {error&&<div className="err-box">{error}</div>}
+      {toast&&<div className="toast-box">{toast}</div>}
+      <div style={{display:"flex",gap:10,marginBottom:16,flexWrap:"wrap"}}>
+        {[{l:"매칭",v:matched.length,c:"#22C55E",bg:"#F0FDF4"},{l:"미매칭",v:unmatched.length,c:"#F59E0B",bg:"#FFFBEB"},{l:"오류",v:errors.length,c:"#EF4444",bg:"#FEF2F2"}].map(x=>(
+          <div key={x.l} style={{flex:1,minWidth:80,background:x.bg,borderRadius:12,padding:"14px 12px",textAlign:"center"}}><div style={{fontSize:22,fontWeight:800,color:x.c}}>{x.v}</div><div style={{fontSize:10,color:"#888",marginTop:2}}>{x.l}</div></div>
+        ))}
+        {matched.length>0&&<div style={{flex:1,minWidth:80,background:"white",borderRadius:12,padding:"14px 12px",textAlign:"center",border:"1px solid #E5E7EB"}}><div style={{fontSize:22,fontWeight:800,color:"#2B4A6F"}}>{Math.round(matched.reduce((s,r)=>s+r.score,0)/matched.length*10)/10}</div><div style={{fontSize:10,color:"#888",marginTop:2}}>평균</div></div>}
+      </div>
+      {/* 중복 매칭 경고 */}
+      {(()=>{
+        const studentCounts={};
+        matched.forEach(r=>{if(r.student){const k=r.student.id;studentCounts[k]=(studentCounts[k]||0)+1}});
+        const dupes=Object.entries(studentCounts).filter(([,c])=>c>1);
+        if(dupes.length===0)return null;
+        const dupeNames=dupes.map(([id])=>{const r=matched.find(x=>x.student?.id===Number(id)||x.student?.id===id);return r?.student?.name||"?"});
+        return<div style={{padding:"10px 14px",background:"#FEF2F2",borderRadius:10,marginBottom:12,border:"1px solid #FECACA"}}>
+          <div style={{fontSize:12,fontWeight:700,color:"#DC2626",marginBottom:4}}>⚠️ 중복 매칭 감지</div>
+          <div style={{fontSize:13,color:"#666"}}>같은 학생에 여러 OMR이 매칭되었습니다: <b>{dupeNames.join(", ")}</b></div>
+          <div style={{fontSize:11,color:"#999",marginTop:4}}>해당 학생의 패널을 열어 "학생 변경"으로 올바른 학생을 지정하거나 "이 결과 제거"로 중복을 삭제해 주세요.</div>
+        </div>;
+      })()}
+      <div style={{background:"white",borderRadius:14,overflow:"hidden",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}>
+        {results.map((r,ri)=>{const isOpen=expandedIdx===ri;
+          // 중복 매칭 여부 체크
+          const isDupe=r.status==="matched"&&r.student&&results.filter(x=>x.status==="matched"&&x.student?.id===r.student.id).length>1;
+          return<div key={ri} style={{borderBottom:"1px solid #F5F5F5"}}>
+            <div onClick={()=>setExpandedIdx(isOpen?null:ri)} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 16px",cursor:"pointer",background:isDupe?"#FEF2F2":r.status==="unmatched"?"#FFFBEB":r.status==="error"?"#FEF2F2":"white"}}>
+              <div style={{width:30,height:30,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",background:isDupe?"#FEE2E2":r.status==="matched"?"#F0FDF4":"#FEE2E2",color:isDupe?"#EF4444":r.status==="matched"?"#22C55E":"#EF4444",fontSize:12,fontWeight:800}}>{isDupe?"⚠":r.status==="matched"?"✓":"?"}</div>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:14,fontWeight:600,color:"#1A2F4A"}}>{r.student?r.student.name:r.name||`페이지 ${r.page}`}</div>
+                <div style={{fontSize:11,color:"#999"}}>{r.phone?`010${r.phone}`:"번호 미인식"}{r.student&&` · ${r.student.school}`}{r.exam&&` · ${r.exam.title}`}</div>
+              </div>
+              {r.status==="matched"&&(()=>{
+                const qs=qMapState[r.exam?.id]||[];
+                const eQs=qs.filter(q=>q.question_type==="서술형");
+                const ePts=eQs.reduce((s,q)=>{const ps=essayScores[`${r.student.id}-${q.question_no}`];return s+(ps!=null?ps:0)},0);
+                const hasEssay=eQs.length>0;
+                const essayDone=hasEssay&&eQs.every(q=>essayScores[`${r.student.id}-${q.question_no}`]!=null);
+                const total=Math.round((r.score+ePts)*10)/10;
+                return<div style={{textAlign:"right",display:"flex",alignItems:"center",gap:8}}>
+                  <div>
+                    <div style={{fontSize:18,fontWeight:800,color:hasEssay&&!essayDone?"#D97706":"#2B4A6F"}}>{total}<span style={{fontSize:11,color:"#999"}}>점</span></div>
+                    {hasEssay&&<div style={{fontSize:9,color:essayDone?"#22C55E":"#D97706"}}>{essayDone?"서술형 반영":"서술형 미채점"}</div>}
+                  </div>
+                  {savedSet.has(ri)?
+                    <div style={{padding:"4px 10px",borderRadius:8,background:"#F0FDF4",color:"#22C55E",fontSize:11,fontWeight:700,border:"1px solid #BBF7D0",whiteSpace:"nowrap"}}>저장됨 ✓</div>:
+                    <button onClick={e=>{e.stopPropagation();saveOneStudent(ri)}} disabled={saving||isDupe}
+                      style={{padding:"5px 12px",borderRadius:8,background:isDupe?"#EEE":"#2B4A6F",color:isDupe?"#999":"white",fontSize:11,fontWeight:700,border:"none",cursor:isDupe?"default":"pointer",whiteSpace:"nowrap"}}>
+                      {isDupe?"중복":"저장"}</button>
+                  }
+                </div>;
+              })()}
+              <span style={{fontSize:16,color:"#CCC",transform:isOpen?"rotate(90deg)":"none",transition:"0.2s"}}>›</span>
+            </div>
+            {isOpen&&<div style={{padding:"8px 16px 14px",background:"#FAFAFA"}}>
+              {r.status==="error"&&<div style={{padding:"12px 16px",background:"#FEF2F2",borderRadius:10,marginBottom:8}}>
+                <div style={{fontSize:12,fontWeight:700,color:"#DC2626",marginBottom:4}}>오류 상세</div>
+                <div style={{fontSize:13,color:"#666"}}>{r.msg||"알 수 없는 오류"}</div>
+              </div>}
+              {r.status==="unmatched"&&<div style={{padding:"12px 16px",background:"#FFFBEB",borderRadius:10,marginBottom:8}}>
+                <div style={{fontSize:12,fontWeight:700,color:"#D97706",marginBottom:4}}>학생 매칭 실패</div>
+                <div style={{fontSize:13,color:"#666",marginBottom:8}}>전화번호 010{r.phone||"??"}이 DB에 없습니다{r.name&&` (이름: ${r.name})`}</div>
+                <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+                  <select value={manualSel[ri]||""} onChange={e=>setManualSel(p=>({...p,[ri]:e.target.value}))}
+                    style={{flex:1,minWidth:160,padding:"8px 12px",fontSize:13,border:"1.5px solid #D97706",borderRadius:8,background:"white",cursor:"pointer"}}>
+                    <option value="">학생 선택...</option>
+                    {allStudentsState.filter(s=>!results.some(r2=>r2.student?.id===s.id)).map(s=>(
+                      <option key={s.id} value={s.id}>{s.name} ({s.school}) — 010{(s.phone_st||"").replace(/^010/,"")}</option>
+                    ))}
+                  </select>
+                  <button onClick={()=>manualMatch(ri)} disabled={!manualSel[ri]}
+                    style={{padding:"8px 20px",fontSize:13,fontWeight:700,background:manualSel[ri]?"#2B4A6F":"#CCC",color:"white",border:"none",borderRadius:8,cursor:manualSel[ri]?"pointer":"default",whiteSpace:"nowrap"}}>
+                    매칭 · 채점</button>
+                </div>
+                {r.omr?.objective&&<div style={{fontSize:12,color:"#999",marginTop:6}}>인식된 객관식: {Object.entries(r.omr.objective).filter(([,v])=>v!=null).map(([k,v])=>`${k}번→${v}`).join(", ")}</div>}
+                {r.omr?.short_answer&&Object.keys(r.omr.short_answer).length>0&&<div style={{fontSize:12,color:"#999",marginTop:4}}>인식된 단답형: {Object.entries(r.omr.short_answer).map(([k,v])=>`${k}번→${v}`).join(", ")}</div>}
+              </div>}
+              {/* 매칭된 학생도 다른 학생으로 변경 가능 (동일번호 장난 등) */}
+              {r.status==="matched"&&<div style={{padding:"10px 14px",background:"#F0F7FF",borderRadius:10,marginBottom:8,border:"1px solid #D0E3F7"}}>
+                <div style={{fontSize:11,fontWeight:700,color:"#2B4A6F",marginBottom:6}}>학생 변경</div>
+                <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+                  <select value={manualSel[ri]||""} onChange={e=>setManualSel(p=>({...p,[ri]:e.target.value}))}
+                    style={{flex:1,minWidth:160,padding:"8px 12px",fontSize:13,border:"1.5px solid #93B5D9",borderRadius:8,background:"white",cursor:"pointer"}}>
+                    <option value="">다른 학생으로 변경...</option>
+                    {allStudentsState.filter(s=>s.id!==r.student?.id).map(s=>(
+                      <option key={s.id} value={s.id}>{s.name} ({s.school}) — 010{(s.phone_st||"").replace(/^010/,"")}</option>
+                    ))}
+                  </select>
+                  <button onClick={()=>manualMatch(ri)} disabled={!manualSel[ri]}
+                    style={{padding:"8px 16px",fontSize:13,fontWeight:700,background:manualSel[ri]?"#2B4A6F":"#CCC",color:"white",border:"none",borderRadius:8,cursor:manualSel[ri]?"pointer":"default",whiteSpace:"nowrap"}}>
+                    변경</button>
+                </div>
+              </div>}
+              {/* 이 결과 제거 (저장 전 리스트에서 빼기) */}
+              <div style={{textAlign:"right",marginBottom:4}}>
+                <button onClick={()=>{setResults(prev=>prev.filter((_,i)=>i!==ri));setExpandedIdx(null);setToast("결과에서 제거됨");setTimeout(()=>setToast(""),2000)}}
+                  style={{padding:"4px 12px",fontSize:11,fontWeight:600,background:"#FEF2F2",color:"#EF4444",border:"1px solid #FECACA",borderRadius:6,cursor:"pointer"}}>이 결과 제거</button>
+              </div>
+              {r.details&&r.details.length>0&&<table style={{width:"100%",borderCollapse:"collapse",fontSize:12,marginTop:4}}>
+                <thead><tr style={{background:"#F0F0F0"}}>{["#","유형","정답","답안","배점","결과"].map(h=><th key={h} style={{padding:"7px 8px",textAlign:"left",fontWeight:700,color:"#888",fontSize:10}}>{h}</th>)}</tr></thead>
+                <tbody>{r.details.map((d,di)=>{
+                  if(d.type==="서술형"){
+                    const esKey=r.student?`${r.student.id}-${d.no}`:null;
+                    const esVal=esKey?essayScores[esKey]:undefined;
+                    const max=Number(d.score);
+                    const steps=[];for(let i=0;i<=max;i++)steps.push(i);
+                    return<tr key={di} style={{background:esVal!=null?(esVal===0?"#FEF2F2":esVal>=max?"#F0FDF4":"#EFF6FF"):"#FFFBEB"}}>
+                      <td style={{padding:"6px 8px",fontWeight:700,color:"#C62828"}}>{d.no}</td>
+                      <td style={{padding:"6px 8px"}}><Badge value={d.type} map={typeMap}/></td>
+                      <td style={{padding:"6px 8px",fontWeight:600,fontSize:11}}>{d.answer}</td>
+                      <td style={{padding:"6px 4px"}} colSpan={2}>
+                        <div style={{display:"flex",gap:3,flexWrap:"wrap",alignItems:"center"}}>
+                          {steps.map(v=><button key={v} onClick={()=>esKey&&setEssayScore(r.student.id,d.no,v)}
+                            style={{minWidth:28,height:24,borderRadius:5,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,
+                              background:esVal===v?(v===0?"#EF4444":v===max?"#22C55E":"#3B82F6"):"#F0F0F0",
+                              color:esVal===v?"white":"#888"}}>{v}</button>)}
+                          <input type="number" step="0.5" min="0" max={max} value={esVal!=null&&!steps.includes(esVal)?esVal:""}
+                            placeholder="·" onChange={e=>{const val=parseFloat(e.target.value);if(!isNaN(val)&&val>=0&&val<=max&&esKey)setEssayScore(r.student.id,d.no,val)}}
+                            style={{width:36,height:24,borderRadius:5,border:"1.5px solid #DDD",textAlign:"center",fontSize:11,outline:"none"}}/>
+                        </div>
+                      </td>
+                      <td style={{padding:"6px 8px",fontSize:14,fontWeight:800,color:esVal!=null?(esVal===0?"#EF4444":esVal>=max?"#22C55E":"#3B82F6"):"#D97706"}}>
+                        {esVal!=null?`${esVal}/${max}`:"미채점"}</td>
+                    </tr>;
+                  }
+                  return<tr key={di} style={{background:d.is_correct===false?"#FEF2F2":"white"}}>
+                  <td style={{padding:"6px 8px",fontWeight:700,color:"#2B4A6F"}}>{d.no}</td>
+                  <td style={{padding:"6px 8px"}}><Badge value={d.type} map={typeMap}/></td>
+                  <td style={{padding:"6px 8px",fontWeight:600}}>{d.answer}</td>
+                  <td style={{padding:"6px 8px"}}>
+                    <input type="text" value={d.student_answer??""}onChange={e=>{const v=e.target.value;fixAnswer(ri,di,v===""?null:isNaN(v)?v:Number(v))}}
+                      style={{width:50,padding:"3px 6px",fontSize:12,border:"1px solid #DDD",borderRadius:5,textAlign:"center"}}/></td>
+                  <td style={{padding:"6px 8px",color:"#888"}}>{d.score}</td>
+                  <td style={{padding:"6px 8px",fontSize:14,fontWeight:800,color:d.is_correct?"#22C55E":"#EF4444"}}>{d.is_correct?"✓":"✗"}</td>
+                </tr>;
+                })}</tbody>
+              </table>}
+            </div>}
+          </div>})}
+      </div>
+      <div style={{position:"fixed",bottom:0,left:0,right:0,background:"white",borderTop:"1px solid #EAEAEA",padding:"12px 20px",display:"flex",justifyContent:"center",gap:10,zIndex:40}}>
+        {savedSet.size>0&&<div style={{display:"flex",alignItems:"center",fontSize:12,color:"#22C55E",fontWeight:600}}>{savedSet.size}명 저장됨</div>}
+        <button onClick={handleSave} disabled={saving||matched.length===0} className="btn-primary" style={{maxWidth:400,flex:1,padding:"14px 28px",fontSize:15}}>
+          {saving?"저장 중...":`${matched.filter((_,i)=>!savedSet.has(results.indexOf(_)>=0?results.indexOf(_):i)).length}명 전체 저장`}</button>
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════
+//  TAB 3: 분석 (리포트)
+// ══════════════════════════════
+const RC={primary:"#8B3A2F",accent:"#B75D40",warm:"#D4956A",light:"#FAF6F1",text:"#2D2218",sub:"#8C7B6B",border:"#E8DDD0"};
+const diffConf={"하":{color:"#D4956A"},"중하":{color:"#C0813A"},"중":{color:"#B06830"},"중상":{color:"#9A5028"},"상":{color:"#8B3A2F"},"최상":{color:"#6B1A10"}};
+
+function RadarChart({labels,values,avgValues,size=320}){
+  const cx=size/2,cy=size/2,maxR=95,n=labels.length,as=(2*Math.PI)/n;
+  const gp=(i,v)=>{const a=-Math.PI/2+i*as,r=(v/100)*maxR;return[cx+r*Math.cos(a),cy+r*Math.sin(a)]};
+  return<svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{maxWidth:"100%",height:"auto",display:"block",margin:"0 auto"}}>
+    {[20,40,60,80,100].map(lv=>{const pts=Array.from({length:n},(_,i)=>gp(i,lv));return<polygon key={lv} points={pts.map(p=>p.join(",")).join(" ")} fill="none" stroke={RC.border} strokeWidth={1}/>})}
+    {Array.from({length:n},(_,i)=>{const[x,y]=gp(i,100);return<line key={i} x1={cx} y1={cy} x2={x} y2={y} stroke={RC.border} strokeWidth={1}/>})}
+    {avgValues&&(()=>{const pts=avgValues.map((v,i)=>gp(i,v));return<polygon points={pts.map(p=>p.join(",")).join(" ")} fill="rgba(180,170,158,0.2)" stroke="#B4AA9E" strokeWidth={1.5} strokeDasharray="4,3"/>})()}
+    {(()=>{const pts=values.map((v,i)=>gp(i,v));return<polygon points={pts.map(p=>p.join(",")).join(" ")} fill="rgba(183,93,64,0.2)" stroke={RC.accent} strokeWidth={2.5}/>})()}
+    {values.map((v,i)=>{const[x,y]=gp(i,v);return<circle key={i} cx={x} cy={y} r={4} fill={RC.accent} stroke="white" strokeWidth={2}/>})}
+    {labels.map((label,i)=>{const[x,y]=gp(i,118);return<text key={i} x={x} y={y} textAnchor={x<cx-10?"end":x>cx+10?"start":"middle"} dominantBaseline="central" fontSize={12} fontWeight={700} fill={RC.text}>{label}</text>})}
+  </svg>;
+}
+
+function genComment(score,avg,chScores,wq,qs,exam,stName,avgDiff,allRes,histData,studentId){
+  const fn=stName.length>=3?stName.slice(1):stName;
+  const sorted=[...chScores].sort((a,b)=>a.score-b.score);
+  const weakCh=sorted.filter(c=>c.score<70);
+  const strongCh=sorted.filter(c=>c.score>=80);
+  const correctQs=qs.filter(q=>!wq.includes(q.question_no));
+  const wrongQsList=qs.filter(q=>wq.includes(q.question_no));
+  const easyWrong=wrongQsList.filter(q=>["하","중하","중"].includes(q.difficulty));
+  const hardCorrect=correctQs.filter(q=>["상","최상"].includes(q.difficulty));
+  const hardWrong=wrongQsList.filter(q=>["상","최상"].includes(q.difficulty));
+  const dl=d=>({"최상":"최상","상":"상","중상":"중상","중":"중","중하":"중하","하":"하"}[d]||d);
+  const total=qs.reduce((s,q)=>s+Number(q.score),0);
+  const gap=Math.round(Math.abs(score-avg)*10)/10;
+  const p=[];
+
+  // ── 0. 시험 난이도 맥락 ──
+  const avgRate=Math.round((avg/total)*100);
+  let diffContext=`안녕하세요, ${fn} 학생의 ${exam.title} 결과를 안내드립니다. `;
+  if(avgDiff>=4.5||avgRate<45){
+    diffContext+=`이번 시험은 전체적으로 난이도가 높게 출제되었습니다. 반 평균이 ${avg}점(${avgRate}%)으로 형성된 데서 알 수 있듯이, 대부분의 학생이 어려움을 겪은 시험이었습니다. 따라서 점수 자체에 지나치게 무게를 두기보다는, 어떤 유형에서 실점이 발생했는지를 중심으로 분석하는 것이 더 의미 있습니다.`;
+  }else if(avgDiff>=3.5||avgRate<55){
+    diffContext+=`이번 시험은 중상 수준의 난이도로 출제되었으며, 반 평균은 ${avg}점(${avgRate}%)입니다. 기본 개념만으로 풀 수 있는 문항과 응용력이 필요한 문항이 균형 있게 배치된 구성이었습니다.`;
+  }else if(avgDiff>=2.5||avgRate<70){
+    diffContext+=`이번 시험은 전반적으로 중간 수준의 난이도로 출제되었습니다. 반 평균이 ${avg}점(${avgRate}%)으로, 교과 개념을 충실히 학습한 학생이라면 안정적으로 득점할 수 있는 구성이었습니다. 이런 시험에서는 기본 문항의 실수 관리가 곧 점수와 직결됩니다.`;
+  }else{
+    diffContext+=`이번 시험은 비교적 평이한 난이도로 출제되어, 반 평균이 ${avg}점(${avgRate}%)으로 높게 형성되었습니다. 이런 구성에서는 실수 없이 꼼꼼하게 풀어내는 것이 특히 중요하며, 한두 문항의 실수가 전체 순위에 큰 영향을 미칠 수 있습니다.`;
+  }
+  p.push(diffContext);
+
+  // ── 1. 결과 요약 ──
+  let s1=`${fn} 학생은 ${score}점을 받았습니다. `;
+  if(score>=avg+10){
+    s1+=`평균을 ${gap}점 상회하는 결과로, 시험 난이도를 감안했을 때 현재까지의 학습이 안정적으로 이루어지고 있음을 확인할 수 있습니다.`;
+  }else if(score>=avg){
+    s1+=`평균 부근의 결과이며, 기본기는 갖추어져 있으나 고난도 영역에서의 득점력을 한 단계 끌어올릴 수 있는 여지가 남아 있습니다.`;
+  }else if(score>=avg-10){
+    s1+=`평균 대비 다소 아쉬운 결과이지만, 아래에서 말씀드릴 보완 포인트를 집중적으로 잡아주면 충분히 끌어올릴 수 있는 범위입니다.`;
+  }else{
+    s1+=`평균과의 격차가 있는 만큼, 이번 시험을 기점으로 취약 단원에 대한 집중 보완이 필요한 시점입니다.`;
+  }
+  p.push(s1);
+
+  // ── 2. 성취도 분석 ──
+  let s2="";
+  if(strongCh.length>0&&hardCorrect.length>0){
+    s2+=`단원별로 살펴보면, ${strongCh.map(c=>c.name).join("과 ")} 영역에서 ${strongCh.map(c=>c.score+"%").join(", ")}의 정답률을 보이며 해당 파트의 학습이 충실하게 이루어져 있습니다. 특히 ${hardCorrect.map(q=>q.question_no+"번").join(", ")} 같은 난이도 ${dl(hardCorrect[0].difficulty)} 문항까지 정확하게 처리한 점으로 보아, 단순 개념 이해를 넘어 응용 문제에 대한 접근력도 갖추어져 있는 것으로 판단됩니다.`;
+  }else if(strongCh.length>0){
+    s2+=`단원별로 살펴보면, ${strongCh.map(c=>c.name).join("과 ")} 영역에서 ${strongCh.map(c=>c.score+"%").join(", ")}의 정답률을 기록하고 있어 해당 파트의 기본 학습은 충실하게 이루어진 것으로 보입니다.`;
+  }else if(hardCorrect.length>0){
+    s2+=`이번 시험에서 ${hardCorrect.map(q=>q.question_no+"번(난이도 "+dl(q.difficulty)+")").join(", ")} 문항을 정확히 풀어낸 점은 주목할 부분입니다. 해당 유형의 문제 해결 과정이 체화되어 있다는 의미이므로, 이 감각을 유지하면서 인접 단원으로 확장해 나가는 것이 중요합니다.`;
+  }else if(correctQs.length>0){
+    s2+=`전체 ${qs.length}문항 중 ${correctQs.length}문항에서 정답을 기록하였으며, 기초적인 개념 이해는 확보되어 있는 상태입니다. 다만, 시험에서 안정적으로 득점하기 위해서는 정답률이 높은 단원의 완성도를 더 끌어올리는 작업이 병행되어야 합니다.`;
+  }
+  if(s2)p.push(s2);
+
+  // ── 3. 보완 분석 ──
+  if(wrongQsList.length>0){
+    let s3="";
+    if(easyWrong.length>0&&hardWrong.length>0){
+      s3+=`한편, ${easyWrong.map(q=>q.question_no+"번").join(", ")} 문항의 경우 난이도가 ${dl(easyWrong[0].difficulty)} 수준임에도 오답이 나왔습니다. 이 유형은 개념 자체가 어려운 것이 아니라 풀이 과정에서 조건을 놓치거나 계산 실수가 개입되었을 가능성이 높으므로, 문제를 처음부터 다시 풀어보며 어디에서 분기가 갈렸는지 확인하는 작업이 필요합니다. 아울러 ${hardWrong.map(q=>q.question_no+"번").join(", ")} 같은 고난도 문항에서도 오답이 발생했는데, 이 문항들은 복합적인 개념 적용이 요구되는 유형인 만큼 정석적인 풀이 과정을 먼저 익힌 뒤 실전 풀이로 넘어가는 단계적 접근이 효과적입니다.`;
+    }else if(easyWrong.length>0){
+      s3+=`다만, ${easyWrong.map(q=>q.question_no+"번").join(", ")} 문항에서 오답이 발생한 점은 점검이 필요합니다. 해당 문항들은 난이도 ${dl(easyWrong[0].difficulty)} 수준으로, 개념 부족보다는 풀이 과정 중 조건 누락이나 연산 실수에서 비롯되었을 가능성이 높습니다. 이러한 유형의 실수는 시간 제한 환경에서 반복 훈련을 통해 체화시키는 것이 가장 효과적입니다.`;
+    }else if(hardWrong.length>0){
+      s3+=`오답이 발생한 ${hardWrong.map(q=>q.question_no+"번").join(", ")} 문항은 난이도 ${dl(hardWrong[0].difficulty)} 이상의 고난도 유형입니다. 이 문항들은 대부분의 학생이 어려움을 겪는 변별력 문항에 해당하므로, 오답 자체보다는 풀이 접근 방식을 점검하고 유사 유형을 반복적으로 경험하는 것이 중요합니다.`;
+    }else{
+      s3+=`오답이 발생한 ${wrongQsList.map(q=>q.question_no+"번").join(", ")} 문항에 대해서는, 풀이 과정을 처음부터 재구성하며 어디에서 판단이 갈렸는지 확인하는 작업이 필요합니다.`;
+    }
+    if(weakCh.length>0){
+      s3+=` 단원 단위로 보면 ${weakCh.map(c=>c.name+"(정답률 "+c.score+"%)").join(", ")} 파트의 정답률이 상대적으로 낮게 나타나고 있어, 이 단원의 핵심 개념과 대표 출제 유형을 중심으로 한 집중 복습이 필요합니다.`;
+    }
+    if(s3)p.push(s3);
+  }
+
+  // ── 4. 최근 시험 흐름 + 향후 계획 ──
+  let s4="";
+  const histEntries=Object.values(histData||{}).sort((a,b)=>new Date(a.exam.created_at)-new Date(b.exam.created_at));
+  if(histEntries.length>0){
+    const pastChScores=[];
+    histEntries.forEach(h=>{
+      const hRes=h.results.find(r=>r.student_id===studentId);
+      if(!hRes)return;
+      const hWq=hRes.wrong_questions||[];
+      const hChMap={};h.qs.forEach(q=>{const key=q.sub_chapter||q.chapter;if(!hChMap[key])hChMap[key]=[];hChMap[key].push(q)});
+      const scores={};Object.entries(hChMap).forEach(([name,qList])=>{
+        const correct=qList.filter(q=>!hWq.includes(q.question_no)).length;
+        scores[name]=Math.round((correct/qList.length)*100);
+      });
+      pastChScores.push({title:h.exam.title,score:hRes.total_score,chScores:scores});
+    });
+    if(pastChScores.length>0){
+      const currChMap={};chScores.forEach(c=>{currChMap[c.name]=c.score});
+      const lastPast=pastChScores[pastChScores.length-1];
+      const improved=[];const declined=[];
+      Object.entries(currChMap).forEach(([name,curScore])=>{
+        const pastScore=lastPast.chScores[name];
+        if(pastScore!=null){
+          const diff=curScore-pastScore;
+          if(diff>=20)improved.push({name,from:pastScore,to:curScore});
+          else if(diff<=-20)declined.push({name,from:pastScore,to:curScore});
+        }
+      });
+      const scoreFlow=[...pastChScores.map(p=>p.score),score];
+      const titles=[...pastChScores.map(p=>p.title),exam.title];
+      s4+=`최근 ${scoreFlow.length}회 시험 흐름을 살펴보면, ${titles.map((t,i)=>t+" "+scoreFlow[i]+"점").join(" → ")}으로 `;
+      const trend=scoreFlow[scoreFlow.length-1]-scoreFlow[0];
+      if(trend>5)s4+=`전반적으로 상승세를 보이고 있습니다. `;
+      else if(trend<-5)s4+=`다소 하락세가 나타나고 있어 흐름을 되잡을 필요가 있습니다. `;
+      else s4+=`비교적 일정한 수준을 유지하고 있습니다. `;
+      if(improved.length>0){
+        s4+=`특히 ${improved.map(c=>c.name+"("+c.from+"% → "+c.to+"%)").join(", ")} 영역에서 눈에 띄는 향상이 있었으며, 해당 단원의 학습이 실전에서 성과로 이어지고 있는 점은 긍정적입니다. `;
+      }
+      if(declined.length>0){
+        s4+=`반면 ${declined.map(c=>c.name+"("+c.from+"% → "+c.to+"%)").join(", ")} 영역은 이전 대비 정답률이 하락하였으므로, 해당 단원의 복습을 다시 한번 진행할 필요가 있습니다. `;
+      }
+    }
+  }
+  if(wrongQsList.length>0){
+    const wqNos=wrongQsList.map(q=>q.question_no).sort((a,b)=>a-b).join(", ");
+    s4+=`다음 수업에서는 이번 시험의 오답 문항(${wqNos}번)에 대한 풀이 점검을 우선적으로 진행할 예정입니다.`;
+    if(weakCh.length>0){
+      s4+=` ${weakCh.map(c=>c.name).join(", ")} 단원은 유사 유형의 문항을 추가로 배정하여, 같은 유형에서 반복적으로 실수가 발생하지 않도록 훈련할 계획입니다.`;
+    }
+    if(easyWrong.length>0&&hardCorrect.length>0){
+      s4+=` ${fn} 학생의 경우 고난도 문항에 대한 접근력은 확보되어 있으므로, 기본 유형에서의 안정성을 높이는 데 집중하면 전체 점수가 빠르게 올라갈 수 있는 구조입니다.`;
+    }else if(score<avg){
+      s4+=` 현재 시점에서는 기본 유형의 정답률을 먼저 끌어올리는 것이 전체 점수 향상에 가장 효율적인 방향이므로, 이에 맞추어 수업을 구성하겠습니다.`;
+    }
+  }else{
+    s4+=`이번 시험에서는 전 문항 정답을 기록하였습니다. 다음 수업에서는 현재의 완성도를 유지하면서, 실전 킬러 문항 대비를 위한 심화 유형 풀이를 단계적으로 확대해 나갈 계획입니다.`;
+  }
+  if(s4)p.push(s4);
+
   return p;
 }
 
-/* ── URL 파라미터 파싱 ── */
-const URL_PARAMS = new URLSearchParams(window.location.search);
-const PARAM_EXAM_ID = URL_PARAMS.get("exam_id");
-const PARAM_STUDENT_ID = URL_PARAMS.get("student_id");
-const PARAM_TOKEN = URL_PARAMS.get("token");
-const MODE = PARAM_TOKEN ? "parent" : (PARAM_EXAM_ID && PARAM_STUDENT_ID) ? "direct" : (PARAM_STUDENT_ID && !PARAM_EXAM_ID) ? "student" : "staff";
+// initialExamId : 이 시험지로 바로 진입 (시험 선택 화면 건너뜀)
+// lockStudentId : 이 학생 한 명만 표시 (학생·학부모 딥링크)
+// onBack        : 잠금 모드에서 "← 목록" 눌렀을 때 호출
+function ReportTab({initialExamId,lockStudentId,onBack}={}){
+  const locked=!!lockStudentId;
+  const[step,setStep]=useState(initialExamId?"loading":"select");
+  const[exams,setExams]=useState([]);
+  const[exam,setExam]=useState(null);
+  const[qs,setQs]=useState([]);
+  const[students,setStudents]=useState([]);
+  const[results,setResults]=useState({});
+  const[allRes,setAllRes]=useState([]);
+  const[subScores,setSubScores]=useState({});
+  const[si,setSi]=useState(0);
+  const[err,setErr]=useState(null);
+  const[histData,setHistData]=useState({});
 
-function App(){
-  const [step,setStep]=useState("loading");
-  const [exams,setExams]=useState([]);
-  const [exam,setExam]=useState(null);
-  const [qs,setQs]=useState([]);
-  const [students,setStudents]=useState([]);
-  const [results,setResults]=useState({});
-  const [allRes,setAllRes]=useState([]);
-  const [studentHistory, setStudentHistory] = useState([]); 
-  const [si,setSi]=useState(0);
-  const [err,setErr]=useState(null);
-  /* 학부모 모드 전용 */
-  const [parentStudent,setParentStudent]=useState(null);
-  const [parentExamList,setParentExamList]=useState([]);
+  useEffect(()=>{if(step==="select")sbGet("exams?status=eq.approved&order=created_at.desc").then(d=>{setExams(d);}).catch(e=>setErr(e.message))},[step]);
 
-  /* ── 초기 로드: 모드별 분기 ── */
+  // 딥링크 진입: exam_id가 주어지면 시험 선택 화면을 건너뛰고 바로 로드
   useEffect(()=>{
-    if(MODE==="direct") initDirect();
-    else if(MODE==="parent") initParent();
-    else if(MODE==="student") initStudent();
-    else sbGet("exams?status=eq.approved&order=created_at.desc").then(d=>{setExams(d);setStep("select")}).catch(e=>setErr(e.message));
-  },[]);
+    if(!initialExamId)return;
+    let alive=true;
+    (async()=>{
+      try{
+        const[ex]=await sbGet(`exams?id=eq.${initialExamId}`);
+        if(!alive)return;
+        if(!ex){setErr("해당 시험을 찾을 수 없습니다.");return}
+        await pickExam(ex);
+      }catch(e){if(alive)setErr(e.message)}
+    })();
+    return()=>{alive=false};
+  },[initialExamId]);
 
-  /* 0) 학생ID 모드: student_id만 → 해당 학생의 시험 목록 */
-  const initStudent=async()=>{
-    try{
-      const sArr=await sbGet(`students?id=eq.${PARAM_STUDENT_ID}`);
-      if(!sArr.length) throw new Error("학생을 찾을 수 없습니다");
-      const st=sArr[0]; setParentStudent(st);
-      const res=await sbGet(`exam_results?student_id=eq.${st.id}&order=created_at.desc`);
-      if(!res.length){setParentExamList([]);setStep("parent-list");return;}
-      const examIds=[...new Set(res.map(r=>r.exam_id))];
-      const allExams=await sbGet(`exams?status=eq.approved&id=in.(${examIds.join(",")})&order=created_at.desc`);
-      const examMap={};allExams.forEach(e=>{examMap[e.id]=e});
-      const list=res.filter(r=>examMap[r.exam_id]).map(r=>({...r,exam:examMap[r.exam_id]}));
-      setParentExamList(list);setExams(allExams);setStep("parent-list");
-    }catch(e){setErr(e.message)}
-  };
-
-  /* 1) 다이렉트 모드: exam_id + student_id → 바로 리포트 */
-  const initDirect=async()=>{
-    try{
-      const [exArr,q,r]=await Promise.all([
-        sbGet(`exams?id=eq.${PARAM_EXAM_ID}`),
-        sbGet(`exam_questions?exam_id=eq.${PARAM_EXAM_ID}&order=question_no`),
-        sbGet(`exam_results?exam_id=eq.${PARAM_EXAM_ID}`)
-      ]);
-      if(!exArr.length) throw new Error("시험을 찾을 수 없습니다");
-      const ex=exArr[0]; setExam(ex); setQs(q);
-      const s=await sbGet(`students?class_name=eq.${encodeURIComponent(ex.class_name)}&order=name`);
-      setStudents(s);
-      const m={};r.forEach(x=>{m[x.student_id]=x});setResults(m);setAllRes(r);
-      /* 정확한 인덱스: swr 배열 내 위치 계산 (BIGINT: String 비교) */
-      const swr2=s.filter(ss=>m[ss.id]);
-      const idx2=swr2.findIndex(ss=>String(ss.id)===String(PARAM_STUDENT_ID));
-      if(idx2<0){setErr("응시한 시험이 없습니다.");return;}
-      setSi(idx2);
-      setStep("report");
-    }catch(e){setErr(e.message)}
-  };
-
-  /* 2) 학부모 모드: token → 학생 조회 → 시험 목록 */
-  const initParent=async()=>{
-    try{
-      const sArr=await sbGet(`students?parent_token=eq.${PARAM_TOKEN}`);
-      if(!sArr.length) throw new Error("유효하지 않은 링크입니다");
-      const st=sArr[0]; setParentStudent(st);
-      /* 이 학생의 모든 시험 결과 조회 */
-      const res=await sbGet(`exam_results?student_id=eq.${st.id}&order=created_at.desc`);
-      if(!res.length){setParentExamList([]);setStep("parent-list");return;}
-      /* 각 결과의 시험 정보 조회 */
-      const examIds=[...new Set(res.map(r=>r.exam_id))];
-      const allExams=await sbGet(`exams?status=eq.approved&id=in.(${examIds.join(",")})&order=created_at.desc`);
-      const examMap={};allExams.forEach(e=>{examMap[e.id]=e});
-      const list=res.filter(r=>examMap[r.exam_id]).map(r=>({...r,exam:examMap[r.exam_id]}));
-      setParentExamList(list);setExams(allExams);setStep("parent-list");
-    }catch(e){setErr(e.message)}
-  };
-
-  /* 학부모: 시험 선택 시 리포트 로드 */
-  const parentPickExam=async(examResult)=>{
-    const ex=examResult.exam; setExam(ex);setErr(null);
-    try{
-      const q=await sbGet(`exam_questions?exam_id=eq.${ex.id}&order=question_no`);setQs(q);
-      const s=await sbGet(`students?class_name=eq.${encodeURIComponent(ex.class_name)}&order=name`);setStudents(s);
-      const r=await sbGet(`exam_results?exam_id=eq.${ex.id}`);
-      const m={};r.forEach(x=>{m[x.student_id]=x});setResults(m);setAllRes(r);
-      const swr2=s.filter(ss=>m[ss.id]);
-      const idx=swr2.findIndex(ss=>String(ss.id)===String(parentStudent.id));
-      if(idx<0){setErr("응시한 시험이 없습니다.");return;}
-      setSi(idx);setStep("report");
-    }catch(e){setErr(e.message)}
-  };
-
-  /* 스태프: 시험 선택 (기존) */
-  const pickExam=async(ex)=>{
+  const pickExam=async ex=>{
     setExam(ex);setErr(null);
     try{
       const q=await sbGet(`exam_questions?exam_id=eq.${ex.id}&order=question_no`);setQs(q);
       const s=await sbGet(`students?class_name=eq.${encodeURIComponent(ex.class_name)}&order=name`);setStudents(s);
-      const r=await sbGet(`exam_results?exam_id=eq.${ex.id}`);
-      const m={};r.forEach(x=>{m[x.student_id]=x});setResults(m);setAllRes(r);setSi(0);setStep("report");
+      const r=await sbGet(`exam_results?exam_id=eq.${ex.id}`);const m={};r.forEach(x=>{m[x.student_id]=x});setResults(m);setAllRes(r);
+      const sub=await sbGet(`exam_subjective?exam_id=eq.${ex.id}`);const sm={};sub.forEach(x=>{sm[`${x.student_id}-${x.question_no}`]=x.partial_score});setSubScores(sm);
+      // 최근 3회 트렌드용 — 같은 반의 과거 시험 데이터 로드
+      let historyData={};
+      try{
+        const pastExams=await sbGet(`exams?status=eq.approved&class_name=eq.${encodeURIComponent(ex.class_name)}&order=created_at.desc&limit=4`);
+        const pastOther=pastExams.filter(pe=>pe.id!==ex.id).slice(0,2); // 이번 시험 제외 최근 2회
+        for(const pe of pastOther){
+          const peQs=await sbGet(`exam_questions?exam_id=eq.${pe.id}&order=question_no`);
+          const peRes=await sbGet(`exam_results?exam_id=eq.${pe.id}`);
+          historyData[pe.id]={exam:pe,qs:peQs,results:peRes};
+        }
+      }catch(e){console.log("트렌드 데이터 로드 실패:",e)}
+      setHistData(historyData);
+      setSi(0);setStep("report");
     }catch(e){setErr(e.message)}
   };
 
-  const swr=students.filter(s=>results[s.id]);
-  const st=swr[si]||swr[0];
+  if(err)return<div style={{padding:40,textAlign:"center",color:RC.primary}}>{err}</div>;
 
-  useEffect(() => {
-    if (step === "report" && st?.id) {
-      sbGet(`exam_results?student_id=eq.${st.id}`)
-        .then(data => setStudentHistory(data))
-        .catch(e => console.error("히스토리 로드 실패:", e));
-    }
-  }, [step, st?.id]);
-
-  if(err)return<div style={{padding:40,textAlign:"center",color:C.primary}}>{err}</div>;
-  if(step==="loading")return<div style={{padding:40,textAlign:"center",color:C.sub}}>로딩 중...</div>;
-
-  /* ── 학부모 모드: 시험 목록 화면 ── */
-  if(step==="parent-list")return(
-    <div style={{minHeight:"100vh",padding:20,maxWidth:550,margin:"0 auto"}}>
-      <div style={{background:`linear-gradient(135deg,${C.primary},${C.accent})`,borderRadius:20,padding:28,color:"white",marginBottom:20,textAlign:"center"}}>
-        <div style={{fontSize:10,letterSpacing:2,opacity:0.6}}>STUDENT REPORT</div>
-        <h1 style={{fontSize:22,fontWeight:800}}>성적 분석 리포트</h1>
-        <div style={{fontSize:14,marginTop:10,opacity:0.9}}>{parentStudent?.name} 학생</div>
-      </div>
-      {parentExamList.length===0?(
-        <div style={{padding:40,textAlign:"center",color:C.sub}}>아직 응시한 시험이 없습니다</div>
-      ):parentExamList.map(item=>(
-        <button key={item.exam_id} onClick={()=>parentPickExam(item)} style={{display:"block",width:"100%",background:"white",borderRadius:14,padding:"18px 20px",border:`1.5px solid ${C.border}`,cursor:"pointer",textAlign:"left",marginBottom:10}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <div>
-              <div style={{fontSize:16,fontWeight:700,color:C.text}}>{item.exam.title}</div>
-              <div style={{fontSize:12,color:C.sub,marginTop:3}}>{item.exam.school} · {item.exam.class_name}</div>
-            </div>
-            <div style={{textAlign:"right"}}>
-              <div style={{fontSize:24,fontWeight:800,color:C.accent}}>{item.total_score}<span style={{fontSize:13,fontWeight:600}}>점</span></div>
-            </div>
-          </div>
-        </button>
-      ))}
+  if(step==="loading")return(
+    <div style={{padding:60,textAlign:"center"}}>
+      <div style={{width:36,height:36,border:"4px solid #E5E5E5",borderTopColor:RC.primary,borderRadius:"50%",margin:"0 auto 14px",animation:"spin 1s linear infinite"}}/>
+      <div style={{fontSize:13,color:RC.sub}}>분석지를 불러오는 중…</div>
     </div>
   );
 
-  /* ── 스태프 모드: 시험 선택 화면 (기존) ── */
   if(step==="select")return(
-    <div style={{minHeight:"100vh",padding:20,maxWidth:550,margin:"0 auto"}}>
-      <div style={{background:`linear-gradient(135deg,${C.primary},${C.accent})`,borderRadius:20,padding:28,color:"white",marginBottom:20,textAlign:"center"}}>
-        <div style={{fontSize:10,letterSpacing:2,opacity:0.6}}>STUDENT REPORT</div>
-        <h1 style={{fontSize:22,fontWeight:800}}>성적 분석 리포트</h1>
-      </div>
+    <div style={{padding:20,maxWidth:550,margin:"0 auto"}}>
       {exams.map(ex=>(
-        <button key={ex.id} onClick={()=>pickExam(ex)} style={{display:"block",width:"100%",background:"white",borderRadius:14,padding:"18px 20px",border:`1.5px solid ${C.border}`,cursor:"pointer",textAlign:"left",marginBottom:10}}>
-          <div style={{fontSize:16,fontWeight:700,color:C.text}}>{ex.title}</div>
-          <div style={{fontSize:12,color:C.sub,marginTop:3}}>{ex.school} · {ex.class_name}</div>
+        <button key={ex.id} onClick={()=>pickExam(ex)} style={{display:"block",width:"100%",background:"white",borderRadius:14,padding:"18px 20px",border:`1.5px solid ${RC.border}`,cursor:"pointer",textAlign:"left",marginBottom:10}}>
+          <div style={{fontSize:16,fontWeight:700,color:RC.text,display:"flex",alignItems:"center",gap:7}}><CatBadge cat={ex.category}/>{ex.title}</div>
+          <div style={{fontSize:12,color:RC.sub,marginTop:3}}>{ex.school} · {ex.class_name}</div>
         </button>
       ))}
     </div>
   );
 
-  if(!swr.length)return<div style={{padding:40,textAlign:"center",color:C.sub}}>채점된 학생이 없습니다<br/><button onClick={()=>{(MODE==="parent"||MODE==="student")?setStep("parent-list"):setStep("select")}} style={{marginTop:12,padding:"8px 16px",background:C.primary,color:"white",border:"none",borderRadius:8,cursor:"pointer"}}>← 돌아가기</button></div>;
+  const allSwr=students.filter(s=>results[s.id]);
+  const swr=locked?allSwr.filter(s=>String(s.id)===String(lockStudentId)):allSwr;
+  if(!swr.length)return(
+    <div style={{padding:40,textAlign:"center",color:RC.sub}}>
+      {locked?"이 시험은 아직 채점 결과가 없습니다.":"채점된 학생이 없습니다"}
+      <br/><button onClick={()=>locked&&onBack?onBack():setStep("select")} style={{marginTop:12,padding:"8px 16px",background:RC.primary,color:"white",border:"none",borderRadius:8,cursor:"pointer"}}>← 돌아가기</button>
+    </div>
+  );
 
-  const res=results[st.id],wq=res?.wrong_questions||[],score=res?.total_score||0;
-  const avg=allRes.length?Math.round((allRes.reduce((s,r)=>s+(r.total_score||0),0)/allRes.length)*10)/10:0;
+  const st=swr[si]||swr[0];
+  const res=results[st.id],wq=res?.wrong_questions||[];
+  // 점수 직접 계산: OMR(맞은 문항 배점 합) + 서술형(부분점수 합)
+  const calcStudentScore=(studentId,wrongQs)=>{
+    const omrPts=qs.filter(q=>q.question_type!=="서술형"&&!wrongQs.includes(q.question_no)).reduce((s,q)=>s+Number(q.score),0);
+    const essayPts=qs.filter(q=>q.question_type==="서술형").reduce((s,q)=>{const ps=subScores[`${studentId}-${q.question_no}`];return s+(ps!=null?ps:0)},0);
+    return Math.round((omrPts+essayPts)*10)/10;
+  };
+  const score=calcStudentScore(st.id,wq);
+  // ⚠️ 반평균은 반드시 반 전체(allSwr) 기준 — 학생 잠금 모드에서도 동일해야 함
+  const avg=allSwr.length?Math.round((allSwr.reduce((s,student)=>{const r2=results[student.id];return s+calcStudentScore(student.id,r2?.wrong_questions||[])},0)/allSwr.length)*10)/10:0;
 
-  const qWrongCounts = {};
-  qs.forEach(q => qWrongCounts[q.question_no] = 0);
-  allRes.forEach(r => {
-    (r.wrong_questions || []).forEach(w => {
-      if(qWrongCounts[w] !== undefined) qWrongCounts[w]++;
-    });
-  });
-  
-  const diffWeight = {"최상":6, "상":5, "중상":4, "중":3, "중하":2, "하":1};
-  const hardestQs = [...qs].sort((a,b) => {
-    const cDiff = qWrongCounts[b.question_no] - qWrongCounts[a.question_no];
-    if(cDiff !== 0) return cDiff;
-    return (diffWeight[b.difficulty]||0) - (diffWeight[a.difficulty]||0); 
-  }).slice(0, 3);
-  const hardestText = hardestQs.length > 0 ? hardestQs.map(q => q.question_no + "번").join(", ") : "-";
+  const diffWeight={"최상":6,"상":5,"중상":4,"중":3,"중하":2,"하":1};
+  const qWrongCounts={};qs.forEach(q=>qWrongCounts[q.question_no]=0);allRes.forEach(r=>{(r.wrong_questions||[]).forEach(w=>{if(qWrongCounts[w]!=null)qWrongCounts[w]++})});
+  const hardestQs=[...qs].sort((a,b)=>{const c=qWrongCounts[b.question_no]-qWrongCounts[a.question_no];return c!==0?c:(diffWeight[b.difficulty]||0)-(diffWeight[a.difficulty]||0)}).slice(0,3);
+  let totalDiff=0;qs.forEach(q=>totalDiff+=(diffWeight[q.difficulty]||3));const avgDiff=qs.length?Math.round(totalDiff/qs.length):3;
+  const diffRevMap={6:"최상",5:"상",4:"중상",3:"중",2:"중하",1:"하"};
 
-  let totalDiff = 0;
-  qs.forEach(q => totalDiff += (diffWeight[q.difficulty] || 3));
-  const avgDiff = qs.length ? Math.round(totalDiff / qs.length) : 3;
-  const diffRevMap = {6:"최상", 5:"상", 4:"중상", 3:"중", 2:"중하", 1:"하"};
-  const examDifficulty = diffRevMap[avgDiff] || "중";
-
-  const chMap={};qs.forEach(q=>{if(!chMap[q.chapter])chMap[q.chapter]=[];chMap[q.chapter].push(q)});
+  // 중단원(sub_chapter) 기준으로 그룹핑 — 대단원은 범위가 넓어 시각적 의미가 떨어짐
+  const chMap={};qs.forEach(q=>{const key=q.sub_chapter||q.chapter;if(!chMap[key])chMap[key]=[];chMap[key].push(q)});
   const chEntries=Object.entries(chMap);
-  const chScores=chEntries.map(([name,qList])=>{
-    const correct=qList.filter(q=>!wq.includes(q.question_no)).length;
-    return{name,score:Math.round((correct/qList.length)*100),total:qList.length,correct};
-  });
-  const avgScores=chEntries.map(([,qList])=>{
-    const rates=allRes.map(r=>{const w=r.wrong_questions||[];return Math.round((qList.filter(q=>!w.includes(q.question_no)).length/qList.length)*100)});
-    return rates.length?Math.round(rates.reduce((a,b)=>a+b,0)/rates.length):0;
-  });
-
-  const diffDist={};qs.forEach(q=>{const k=q.difficulty;diffDist[k]=(diffDist[k]||0)+1});
-  const diffLabels={"하":"기본","중하":"기본+","중":"중간","중상":"중상","상":"상","최상":"최고"};
-  const diffData=Object.entries(diffDist).map(([k,v])=>({name:diffLabels[k]||k,count:v,color:diffConf[k]?.color||"#999"}));
-
-  const chColors=["#8B3A2F","#C0613A","#D4956A","#E8B88A","#6B1A10"];
-  const chDist=chEntries.map(([name,qList],i)=>({name,count:qList.length,color:chColors[i%chColors.length]}));
-
-  const comments=genComment(score, avg, chScores, wq, qs, exam, st.name, studentHistory, exams);
+  const chScores=chEntries.map(([name,qList])=>{const correct=qList.filter(q=>!wq.includes(q.question_no)).length;return{name,score:Math.round((correct/qList.length)*100),total:qList.length,correct}});
+  const avgScores=chEntries.map(([,qList])=>{const rates=allRes.map(r=>{const w=r.wrong_questions||[];return Math.round((qList.filter(q=>!w.includes(q.question_no)).length/qList.length)*100)});return rates.length?Math.round(rates.reduce((a,b)=>a+b,0)/rates.length):0});
+  const comments=genComment(score,avg,chScores,wq,qs,exam,st.name,avgDiff,allRes,histData,st.id);
 
   return(
-    <div className="report-wrap" style={{maxWidth:760,margin:"0 auto",background:C.light,minHeight:"100vh"}}>
-      
-      <div className="no-print" style={{padding:"12px 20px",display:"flex",gap:8,background:"white",borderBottom:`1px solid ${C.border}`}}>
-        {MODE==="direct"?null:(
-          <button onClick={()=>{(MODE==="parent"||MODE==="student")?setStep("parent-list"):setStep("select")}} style={{padding:"8px 14px",fontSize:12,background:"white",color:C.sub,border:`1px solid ${C.border}`,borderRadius:8,cursor:"pointer"}}>{(MODE==="parent"||MODE==="student")?"← 시험 목록":"← 시험 선택"}</button>
-        )}
-        {MODE==="parent"||MODE==="student"||MODE==="direct"?(
-          <div style={{flex:1,padding:"8px 12px",fontSize:14,fontWeight:600,color:C.text}}>{st?.name}</div>
+    <div className="report-wrap" style={{maxWidth:760,margin:"0 auto",background:RC.light,minHeight:"100vh"}}>
+      <div className="no-print" style={{padding:"12px 20px",display:"flex",gap:8,alignItems:"center",background:"white",borderBottom:`1px solid ${RC.border}`}}>
+        {locked?(
+          <>
+            {onBack&&<button onClick={onBack} style={{padding:"8px 14px",fontSize:12,background:"white",color:RC.sub,border:`1px solid ${RC.border}`,borderRadius:8,cursor:"pointer",whiteSpace:"nowrap"}}>← 회차 목록</button>}
+            <div style={{flex:1,display:"flex",alignItems:"center",gap:7,minWidth:0}}>
+              <CatBadge cat={exam.category}/>
+              <span style={{fontSize:13,fontWeight:700,color:RC.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{exam.title}</span>
+            </div>
+          </>
         ):(
-          <select value={si} onChange={e=>setSi(Number(e.target.value))}
-            style={{flex:1,padding:"8px 12px",fontSize:14,fontWeight:600,border:`1.5px solid ${C.accent}`,borderRadius:8,color:C.text}}>
-            {swr.map((s,i)=><option key={s.id} value={i}>{s.name}</option>)}
-          </select>
+          <>
+            <button onClick={()=>setStep("select")} style={{padding:"8px 14px",fontSize:12,background:"white",color:RC.sub,border:`1px solid ${RC.border}`,borderRadius:8,cursor:"pointer"}}>← 시험 선택</button>
+            <select value={si} onChange={e=>setSi(Number(e.target.value))} style={{flex:1,padding:"8px 12px",fontSize:14,fontWeight:600,border:`1.5px solid ${RC.accent}`,borderRadius:8,color:RC.text}}>
+              {swr.map((s,i)=><option key={s.id} value={i}>{s.name}</option>)}
+            </select>
+          </>
         )}
-        <button onClick={()=>window.print()} style={{padding:"8px 16px",fontSize:12,fontWeight:600,background:C.primary,color:"white",border:"none",borderRadius:8,cursor:"pointer"}}>🖨 인쇄</button>
+        <button onClick={()=>window.print()} style={{padding:"8px 16px",fontSize:12,fontWeight:600,background:RC.primary,color:"white",border:"none",borderRadius:8,cursor:"pointer",whiteSpace:"nowrap"}}>🖨 인쇄</button>
       </div>
 
-      <div className="page-padding">
-        
-        <div className="title-section">
-          <h1>{exam.class_name?.replace(/\[SNT\]\s*/,"")}</h1>
-          <h2>{exam.title}</h2>
-          <div className="report-label">성적 분석 리포트</div>
-          <div className="student-label">학생: <b style={{color:C.text,fontSize:"1.05em"}}>{st.name}</b></div>
+      <div style={{padding:"28px 28px 20px"}}>
+        <div style={{marginBottom:20}}>
+          <h1 style={{fontSize:28,fontWeight:800,color:RC.text}}>{exam.class_name?.replace(/\[SNT\]\s*/,"")}</h1>
+          <h2 style={{fontSize:22,fontWeight:700,color:RC.text,marginTop:6}}>{exam.title}</h2>
+          <div style={{fontSize:16,fontWeight:700,color:RC.accent,marginTop:10}}>성적 분석 리포트</div>
+          <div style={{fontSize:14,color:RC.sub,marginTop:14}}>학생: <b style={{color:RC.text}}>{st.name}</b></div>
         </div>
 
-        <div className="score-banner">
-          <div className="score-banner-val">{score}점</div>
-          <div className="score-banner-info">
-            <div className="score-banner-sub">총 문항수 {qs.length}문항</div>
-            <div className="score-banner-structure">{exam.structure || "객관식 16 + 단답형 3 + 서술형 3"}</div>
-          </div>
+        <div style={{background:RC.accent,borderRadius:12,padding:"22px 30px",color:"white",display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:24}}>
+          <div style={{fontSize:46,fontWeight:900,lineHeight:1}}>{score}점</div>
+          <div style={{textAlign:"right"}}><div style={{fontSize:14,fontWeight:700,opacity:0.9,marginBottom:6}}>총 문항수 {qs.length}문항</div><div style={{fontSize:12,fontWeight:500,opacity:0.75}}>{exam.structure||""}</div></div>
         </div>
 
-        <div className="grid-3">
-          {[
-            { l: "반 평균", v: `${avg}점`, s: "전체 응시생 기준" },
-            { l: "변별력 문항", v: hardestText, s: null }, 
-            { l: "전체 난도", v: examDifficulty, s: "출제 문항 난도 평균" }
-          ].map(x=>(
-            <div key={x.l} className="grid-3-card">
-              <div className="grid-3-label">{x.l}</div>
-              <div className="grid-3-val" style={{fontSize: x.v.length > 8 ? "18px" : "24px"}}>{x.v}</div>
-              {x.s && <div className="grid-3-sub">{x.s}</div>}
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:14,marginBottom:24}}>
+          {[{l:"반 평균",v:`${avg}점`,s:"전체 응시생 기준"},{l:"변별력 문항",v:hardestQs.map(q=>q.question_no+"번").join(", ")},{l:"전체 난도",v:diffRevMap[avgDiff]||"중"}].map(x=>(
+            <div key={x.l} style={{background:"white",borderRadius:12,padding:"18px 12px",textAlign:"center",border:`1px solid ${RC.border}`}}>
+              <div style={{fontSize:12,color:RC.accent,fontWeight:700,marginBottom:8}}>{x.l}</div>
+              <div style={{fontSize:x.v.length>8?18:24,fontWeight:800,color:RC.text}}>{x.v}</div>
+              {x.s&&<div style={{fontSize:11,color:RC.sub,marginTop:6}}>{x.s}</div>}
             </div>
           ))}
         </div>
 
-        <div className="no-break" style={{background:"white",borderRadius:12,padding:"22px 24px",border:`1px solid ${C.border}`,marginBottom:24}}>
-          <div style={{fontSize:12,color:C.accent,fontWeight:700,marginBottom:10,textDecoration:"underline",textUnderlineOffset:4}}>코멘트</div>
-          {comments.map((l,i)=>(
-            <p key={i} style={{fontSize:13.5,lineHeight:1.85,color:"#444",marginBottom:i<comments.length-1?12:0,paddingLeft:i===comments.length-1?14:0,borderLeft:i===comments.length-1?`3px solid ${C.accent}`:"none"}}>{l}</p>
-          ))}
+        <div className="no-break" style={{background:"white",borderRadius:12,padding:"22px 24px",border:`1px solid ${RC.border}`,marginBottom:24}}>
+          <div style={{fontSize:12,color:RC.accent,fontWeight:700,marginBottom:10}}>코멘트</div>
+          {comments.map((l,i)=><p key={i} style={{fontSize:13.5,lineHeight:1.85,color:"#444",marginBottom:i<comments.length-1?12:0}}>{l}</p>)}
         </div>
 
-        <div className="no-break" style={{background:"white",borderRadius:12,padding:"26px 20px",border:`1px solid ${C.border}`,marginBottom:24}}>
-          <div style={{fontSize:11,color:C.accent,fontWeight:700,letterSpacing:1, marginLeft: 4}}>MASTERY</div>
-          <div style={{fontSize:20,fontWeight:800,color:C.text,marginTop:4,marginBottom:20, marginLeft: 4}}>단원별 성취도</div>
-          
-          <div style={{marginBottom: 30}}>
-            <RadarChart labels={chScores.map(c=>c.name)} values={chScores.map(c=>c.score)} avgValues={avgScores} size={340}/>
-          </div>
-          
-          <div style={{display:"flex", justifyContent:"center", gap: 30, flexWrap:"wrap", width:"100%"}}>
-            {chScores.map((ch)=>(
-              <div key={ch.name} style={{textAlign:"center", minWidth: 60}}>
-                <div style={{fontSize:13,fontWeight:700,color:C.text}}>{ch.name}</div>
-                <div style={{fontSize:22,fontWeight:800,color:C.accent, margin:"2px 0"}}>{ch.score}%</div>
-                <div style={{fontSize:11,color:C.sub}}>{ch.correct}/{ch.total} 정답</div>
-              </div>
-            ))}
-          </div>
-
-          <div style={{display:"flex",justifyContent:"center",gap:20,marginTop:26,fontSize:12,color:C.sub}}>
-            <span style={{display:"flex",alignItems:"center",gap:6}}><span style={{width:16,height:3,background:C.accent,borderRadius:2}}/> 내 성취도</span>
-            <span style={{display:"flex",alignItems:"center",gap:6}}><span style={{width:16,height:3,background:"#B4AA9E",borderRadius:2,opacity:0.5}}/> 전체 평균</span>
+        <div className="no-break" style={{background:"white",borderRadius:12,padding:"26px 20px",border:`1px solid ${RC.border}`,marginBottom:24}}>
+          <div style={{fontSize:11,color:RC.accent,fontWeight:700,letterSpacing:1,marginLeft:4}}>MASTERY</div>
+          <div style={{fontSize:20,fontWeight:800,color:RC.text,marginTop:4,marginBottom:20,marginLeft:4}}>단원별 성취도</div>
+          <RadarChart labels={chScores.map(c=>c.name)} values={chScores.map(c=>c.score)} avgValues={avgScores} size={320}/>
+          <div style={{display:"flex",justifyContent:"center",gap:30,flexWrap:"wrap",marginTop:20}}>
+            {chScores.map(ch=><div key={ch.name} style={{textAlign:"center",minWidth:60}}>
+              <div style={{fontSize:13,fontWeight:700,color:RC.text}}>{ch.name}</div>
+              <div style={{fontSize:22,fontWeight:800,color:RC.accent,margin:"2px 0"}}>{ch.score}%</div>
+              <div style={{fontSize:11,color:RC.sub}}>{ch.correct}/{ch.total} 정답</div>
+            </div>)}
           </div>
         </div>
 
-        <div className="no-break grid-2">
-          <div style={{background:"white",borderRadius:12,padding:"20px",border:`1px solid ${C.border}`}}>
-            <div style={{fontSize:12,color:C.accent,fontWeight:700,marginBottom:14}}>체감 난도 구성</div>
-            <div className="donut-layout">
-              <DonutChart data={diffData} size={150}/>
-              <div style={{display:"flex",flexDirection:"column",gap:7}}>
-                {diffData.map(d=>(
-                  <div key={d.name} style={{display:"flex",alignItems:"center",gap:8,fontSize:12}}>
-                    <span style={{width:10,height:10,borderRadius:"50%",background:d.color,flexShrink:0}}/>
-                    <span style={{fontWeight:600,color:C.text,width:32,textAlign:"left"}}>{d.name}</span>
-                    <span style={{color:C.sub}}>{d.count}문항</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-          <div style={{background:"white",borderRadius:12,padding:"20px",border:`1px solid ${C.border}`}}>
-            <div style={{fontSize:12,color:C.accent,fontWeight:700,marginBottom:14}}>영역별 출제 비중</div>
-            {chDist.map(d=>(
-              <div key={d.name} style={{marginBottom:10}}>
-                <div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:4}}>
-                  <span style={{fontWeight:600,color:C.text}}>{d.name}</span>
-                  <span style={{color:C.sub}}>{d.count}문항</span>
-                </div>
-                <div style={{height:8,background:"#F0EBE4",borderRadius:4,overflow:"hidden"}}>
-                  <div style={{height:"100%",width:`${(d.count/qs.length)*100}%`,background:d.color,borderRadius:4}}/>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div style={{borderBottom:`2px solid ${C.accent}`,paddingBottom:4}}>
-          <span style={{fontSize:9,color:C.sub}}>이승준 연구소 · {exam.title} · {st.name}</span>
-          <span style={{float:"right",fontSize:9,color:C.sub}}>01</span>
-        </div>
-      </div>
-
-      <div className="page-break page-padding">
-        <div style={{fontSize:11,color:C.accent,fontWeight:700,letterSpacing:1}}>FULL RESULTS</div>
-        <h2 style={{fontSize:22,fontWeight:800,color:C.text,marginTop:4,marginBottom:16}}>전체 문항 결과</h2>
-        {qs.map(q=>{
-          const isW=wq.includes(q.question_no),dc=diffColors[q.difficulty]||{bg:"#F5F5F5",text:"#666"};
-          return(
-            <div key={q.question_no} style={{display:"flex",alignItems:"center",gap:12,padding:"11px 14px",background:"white",borderRadius:10,marginBottom:6,border:`1px solid ${isW?"#FECACA":C.border}`}}>
+        <div className="page-break" style={{marginTop:24}}>
+          <div style={{fontSize:11,color:RC.accent,fontWeight:700,letterSpacing:1}}>FULL RESULTS</div>
+          <h2 style={{fontSize:22,fontWeight:800,color:RC.text,marginTop:4,marginBottom:16}}>전체 문항 결과</h2>
+          {qs.map(q=>{const isW=wq.includes(q.question_no),dc=diffMap[q.difficulty]||{bg:"#F5F5F5",text:"#666"};
+            return<div key={q.question_no} style={{display:"flex",alignItems:"center",gap:12,padding:"11px 14px",background:"white",borderRadius:10,marginBottom:6,border:`1px solid ${isW?"#FECACA":RC.border}`}}>
               <div style={{width:32,height:32,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",background:isW?"#FEE2E2":"#F0FDF4",color:isW?"#DC2626":"#16A34A",fontWeight:800,fontSize:14}}>{q.question_no}</div>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:13,fontWeight:600,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{q.topic}</div>
-                <div style={{fontSize:11,color:C.sub}}>{q.chapter} · {q.score}점</div>
-              </div>
+              <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:RC.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{q.topic}</div><div style={{fontSize:11,color:RC.sub}}>{q.chapter} · {q.score}점</div></div>
               <span style={{fontSize:10,padding:"3px 10px",borderRadius:20,background:dc.bg,color:dc.text,fontWeight:600,flexShrink:0}}>{q.difficulty}</span>
               <span style={{fontSize:16,fontWeight:800,width:22,textAlign:"center",color:isW?"#EF4444":"#22C55E"}}>{isW?"✗":"✓"}</span>
-            </div>
-          );
-        })}
-        <div style={{borderBottom:`2px solid ${C.accent}`,paddingBottom:4,marginTop:20}}>
-          <span style={{fontSize:9,color:C.sub}}>이승준 연구소 · {exam.title} · {st.name}</span>
-          <span style={{float:"right",fontSize:9,color:C.sub}}>02</span>
+            </div>;
+          })}
+        </div>
+
+        <div style={{borderBottom:`2px solid ${RC.accent}`,paddingBottom:4,marginTop:20}}>
+          <span style={{fontSize:9,color:RC.sub}}>이승준 연구소 · {exam.title} · {st.name}</span>
         </div>
       </div>
     </div>
   );
 }
 
-ReactDOM.render(React.createElement(App), document.getElementById("root"));
+// ══════════════════════════════
+//  학생·학부모 전용 포털  (report.html?student_id=123[&exam_id=...])
+//  — 그 학생이 응시한 모든 시험(차시 실모 + 클리닉)을 회차 목록으로 보여준다.
+//  — 회차 이름표(label)는 관리앱이 app_config.examLabels 에 써 둔 값을 사용.
+//    관리앱에서 아직 연동을 안 했으면 시험지 제목을 그대로 쓴다.
+// ══════════════════════════════
+function StudentPortal({studentId}){
+  const[state,setState]=useState({loading:true});
+  const[sel,setSel]=useState(QS_EXAM||null);
+
+  useEffect(()=>{
+    let alive=true;
+    (async()=>{
+      try{
+        const[stArr,resArr,cfgArr]=await Promise.all([
+          sbGet(`students?id=eq.${encodeURIComponent(studentId)}`),
+          sbGet(`exam_results?student_id=eq.${encodeURIComponent(studentId)}`),
+          sbGet(`app_config?key=eq.examLabels`).catch(()=>[])
+        ]);
+        if(!alive)return;
+        const student=stArr[0];
+        if(!student){setState({loading:false,err:"학생 정보를 찾을 수 없습니다. 주소가 올바른지 확인해 주세요."});return}
+        const ids=[...new Set(resArr.map(r=>r.exam_id).filter(Boolean))];
+        let exams=[];
+        if(ids.length)exams=await sbGet(`exams?id=in.(${ids.join(",")})`);
+        if(!alive)return;
+        const labels=(cfgArr&&cfgArr[0]&&cfgArr[0].value)||{};
+        const rows=exams.map(ex=>{
+          const meta=labels[ex.id]||{};
+          const res=resArr.find(x=>String(x.exam_id)===String(ex.id));
+          return{
+            exam:ex,res,
+            label:meta.label||ex.title,
+            kind:meta.kind||ex.category||"mock",
+            order:meta.order!=null?meta.order:9000
+          };
+        }).sort((a,b)=>(a.order-b.order)||(new Date(a.exam.created_at||0)-new Date(b.exam.created_at||0)));
+        setState({loading:false,student,rows});
+      }catch(e){if(alive)setState({loading:false,err:e.message})}
+    })();
+    return()=>{alive=false};
+  },[studentId]);
+
+  if(state.loading)return(
+    <div style={{padding:60,textAlign:"center"}}>
+      <div style={{width:36,height:36,border:"4px solid #E5E5E5",borderTopColor:"#2B4A6F",borderRadius:"50%",margin:"0 auto 14px",animation:"spin 1s linear infinite"}}/>
+      <div style={{fontSize:13,color:"#999"}}>불러오는 중…</div>
+    </div>
+  );
+  if(state.err)return<div style={{padding:40,textAlign:"center",color:"#DC2626",fontSize:14,fontWeight:600}}>{state.err}</div>;
+
+  // 특정 회차 분석지 보기
+  if(sel)return<ReportTab key={sel} initialExamId={sel} lockStudentId={studentId} onBack={()=>setSel(null)}/>;
+
+  const{student,rows}=state;
+  const graded=r=>r.res&&r.res.omr_graded&&r.res.sub_graded;
+
+  return(
+    <div style={{maxWidth:620,margin:"0 auto",padding:"18px 16px 60px"}}>
+      <div style={{background:"linear-gradient(135deg,#1A2F4A,#2B4A6F)",borderRadius:16,padding:"20px 22px",color:"white",marginBottom:16}}>
+        <div style={{fontSize:11,opacity:0.65,fontWeight:600}}>SNT 조창성&amp;이승준 · 시험 분석지</div>
+        <div style={{fontSize:22,fontWeight:800,marginTop:5}}>{student.name}</div>
+        <div style={{fontSize:11,opacity:0.6,marginTop:3}}>{student.school} · {student.class_name}</div>
+      </div>
+
+      {rows.length===0?(
+        <div style={{background:"white",borderRadius:14,padding:"40px 20px",textAlign:"center",color:"#999",fontSize:13}}>
+          아직 채점된 시험이 없습니다.
+        </div>
+      ):rows.map(r=>{
+        const c=catOf(r.kind);
+        const ok=graded(r);
+        return(
+          <button key={r.exam.id} onClick={()=>setSel(r.exam.id)}
+            style={{display:"flex",width:"100%",alignItems:"center",gap:12,background:"white",borderRadius:14,padding:"15px 17px",
+              border:`1.5px solid ${c.bd}`,borderLeft:`5px solid ${c.color}`,cursor:"pointer",textAlign:"left",marginBottom:9,
+              boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:15,fontWeight:800,color:"#1A2F4A"}}>{r.label}</div>
+              <div style={{fontSize:11,color:"#999",marginTop:3,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                <CatBadge cat={r.kind}/>
+                <span>{r.exam.title}</span>
+              </div>
+            </div>
+            <div style={{textAlign:"right",whiteSpace:"nowrap"}}>
+              {ok?(
+                <div style={{fontSize:21,fontWeight:800,color:c.color}}>{r.res.total_score}<span style={{fontSize:12}}>점</span></div>
+              ):(
+                <div style={{fontSize:12,fontWeight:700,color:"#D97706"}}>채점중</div>
+              )}
+              <div style={{fontSize:10,color:"#BBB",marginTop:2}}>분석지 보기 →</div>
+            </div>
+          </button>
+        );
+      })}
+
+      <div style={{fontSize:10,color:"#BBB",textAlign:"center",marginTop:18,lineHeight:1.6}}>
+        회차를 누르면 문항별 오답·단원별 성취도 분석지가 열립니다.<br/>
+        © 2026 SNT 조창성&amp;이승준
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════
+//  MAIN APP
+// ══════════════════════════════
+function App(){
+  // ⚠️ Hook은 반드시 조건문보다 위에서 호출 (렌더 간 순서 고정)
+  const[tab,setTab]=useState("register");
+  const[apiKey,setApiKey]=useState(SAVED_KEY);
+  const tabs=[{id:"register",label:"문항등록",icon:"📄"},{id:"omr",label:"OMR등록",icon:"📋"},{id:"report",label:"분석",icon:"📊"}];
+
+  // 학생·학부모 딥링크로 들어온 경우 → 교사용 탭(문항등록·OMR·API키)을 숨기고 전용 포털만 노출
+  if(QS_STUDENT)return<StudentPortal studentId={QS_STUDENT}/>;
+  // 시험만 지정된 경우(교사가 특정 시험 분석지를 바로 열 때)
+  if(QS_EXAM)return<ReportTab initialExamId={QS_EXAM}/>;
+
+  return(
+    <div style={{minHeight:"100vh"}}>
+      <div className="tab-bar no-print">
+        {tabs.map(t=>(
+          <button key={t.id} className={`tab-btn ${tab===t.id?"active":""}`} onClick={()=>setTab(t.id)}>
+            <span style={{fontSize:16,display:"block",marginBottom:2}}>{t.icon}</span>{t.label}
+          </button>
+        ))}
+      </div>
+
+      {(tab==="register"||tab==="omr")&&<div className="no-print" style={{padding:"0 16px"}}><div style={{maxWidth:600,margin:"8px auto 0"}}><ApiKeyInput apiKey={apiKey} setApiKey={setApiKey}/></div></div>}
+
+      {tab==="register"&&<RegisterTab apiKey={apiKey}/>}
+      {tab==="omr"&&<OmrTab apiKey={apiKey}/>}
+      {tab==="report"&&<ReportTab/>}
+    </div>
+  );
+}
+
+ReactDOM.render(React.createElement(App),document.getElementById("root"));
 </script>
 </body>
 </html>
