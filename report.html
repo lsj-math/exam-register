@@ -76,6 +76,98 @@ const CATS=[
   {id:"retest",label:"재시험",      desc:"과락자 재시험",        color:"#D97706", bg:"#FFF7ED", bd:"#FBD9A5"}
 ];
 const catOf=c=>CATS.find(x=>x.id===(c||"mock"))||CATS[0];
+
+/* ══════════════════════════════════════════════════════════════
+   점수 계산의 "유일한" 출처
+   ──────────────────────────────────────────────────────────────
+   저장할 때 · 목록에 띄울 때 · 분석지에 그릴 때 전부 이 함수만 씁니다.
+   예전에는 세 곳이 각자 계산해서, 한 곳만 틀려도 아무도 몰랐습니다.
+
+   ⚠️ 두 가지를 일부러 엄격하게 했습니다.
+     1) 객관식 점수는 '선택형·단답형'만 인정합니다.
+        예전 공식은 "서술형이 아니고 오답목록에 없으면 정답"이라서,
+        AI가 유형을 조금이라도 다르게 뽑은 문항에 공짜 점수를 줬습니다.
+     2) 서술형은 채점된 것만 더하고, 안 된 문항 번호를 따로 돌려줍니다.
+        (미채점을 0점으로 조용히 처리하면 반쪽 점수가 학부모에게 나갑니다)
+   ══════════════════════════════════════════════════════════════ */
+const r1=n=>Math.round(Number(n||0)*10)/10;
+const QTYPES=["선택형","단답형","서술형"];
+
+// essayScoreOf(q) → 부분점수(number) 또는 null(미채점)
+function computeScore(qs,wrongQs,essayScoreOf){
+  const wrong=Array.isArray(wrongQs)?wrongQs:[];
+  const objQs=(qs||[]).filter(q=>q.question_type==="선택형"||q.question_type==="단답형");
+  const essayQs=(qs||[]).filter(q=>q.question_type==="서술형");
+  const unknown=(qs||[]).filter(q=>!QTYPES.includes(q.question_type));
+  const omr=objQs.filter(q=>!wrong.includes(q.question_no)).reduce((s,q)=>s+Number(q.score||0),0);
+  let essay=0;const essayMissing=[];
+  essayQs.forEach(q=>{
+    const ps=essayScoreOf?essayScoreOf(q):null;
+    if(ps==null)essayMissing.push(q.question_no);else essay+=Number(ps);
+  });
+  return{
+    total:r1(omr+essay), omr:r1(omr), essay:r1(essay),
+    essayMissing, essayDone:essayMissing.length===0,
+    unknown:unknown.map(q=>q.question_no),
+    max:r1((qs||[]).reduce((s,q)=>s+Number(q.score||0),0))
+  };
+}
+// 맵({`${studentId}-${qno}`: 점수})에서 읽는 흔한 형태
+const essayFromMap=(map,studentId)=>q=>{const v=map[`${studentId}-${q.question_no}`];return v==null?null:v};
+// 화면에서 쓰는 details 배열([{no,type,score,partial_score}])로부터 같은 공식으로 계산
+function scoreFromDetails(details,wrong){
+  const qs=(details||[]).map(d=>({question_no:d.no,question_type:d.type,score:d.score}));
+  const m={};(details||[]).forEach(d=>{if(d.type==="서술형"&&d.partial_score!=null)m[`_-${d.no}`]=d.partial_score});
+  return computeScore(qs,wrong,essayFromMap(m,"_")).total;
+}
+
+/* 저장은 PATCH(순수 UPDATE) + 쓰고 나서 재조회 검증.
+   POST/upsert는 조건이 어긋나면 의도치 않은 값이 들어갈 수 있어 쓰지 않습니다. */
+/* 채점 결과 저장 — 저장 직후 다시 읽어 값이 맞는지 확인한다.
+   조용히 어긋나면 학부모 리포트까지 잘못 나가므로, 다르면 예외를 던져 화면에 띄운다. */
+async function saveResultVerified(examId,studentId,wrong,total,subGraded,name){
+  const row={exam_id:examId,student_id:studentId,wrong_questions:wrong,total_score:r1(total),
+             omr_graded:true,sub_graded:!!subGraded,graded_at:new Date().toISOString()};
+  await sbUpsert("exam_results",[row],"exam_id,student_id");
+  const back=await sbGet(`exam_results?exam_id=eq.${examId}&student_id=eq.${studentId}&select=total_score`);
+  if(!back.length)throw new Error(`${name||studentId}: 저장 후 행을 찾지 못했습니다`);
+  if(Math.abs(Number(back[0].total_score)-r1(total))>0.05)
+    throw new Error(`${name||studentId}: 저장된 값이 다릅니다 (보낸 값 ${r1(total)} → 저장된 값 ${back[0].total_score}). DB 쪽에서 점수를 덮어쓰고 있는지 확인이 필요합니다.`);
+}
+
+/* 저장 전 검문 — 서술형 미채점·유형 이상 문항이 있으면 사람에게 먼저 알린다.
+   그냥 저장하면 반쪽 점수가 학부모 리포트로 나갑니다. */
+function preflightBeforeSave(list,qMap,essayScores){
+  const missing=[],badType=[];
+  list.forEach(r=>{
+    const qs=qMap[r.exam.id]||[];
+    const b=computeScore(qs,r.wrong,essayFromMap(essayScores,r.student.id));
+    if(!b.essayDone)missing.push(`${r.student.name} (${b.essayMissing.join(", ")}번)`);
+    if(b.unknown.length)badType.push(`${r.exam.title}: ${b.unknown.join(", ")}번`);
+  });
+  if(badType.length){
+    alert("⛔ 문항 유형이 잘못된 문항이 있어 저장할 수 없습니다.\n\n"+[...new Set(badType)].join("\n")+
+          "\n\n문항등록 탭에서 유형을 선택형·단답형·서술형 중 하나로 고쳐 주세요.");
+    return false;
+  }
+  if(missing.length){
+    return confirm("⚠️ 서술형이 아직 채점되지 않은 학생이 있습니다.\n\n"+missing.join("\n")+
+      "\n\n이대로 저장하면:\n"+
+      " · 서술형 점수를 뺀 반쪽 점수가 저장됩니다\n"+
+      " · 수학관리앱 그래프에는 반영되지 않습니다 (미채점 방어)\n"+
+      " · 학생 화면에는 '채점중'으로 표시됩니다\n\n"+
+      "그래도 저장할까요?");
+  }
+  return true;
+}
+
+async function patchResultScore(examId,studentId,score){
+  const rows=await sbPatch("exam_results",`exam_id=eq.${examId}&student_id=eq.${studentId}`,{total_score:r1(score)});
+  if(!rows.length)throw new Error("해당 채점 행을 찾지 못했습니다");
+  if(Math.abs(Number(rows[0].total_score)-r1(score))>0.05)
+    throw new Error(`저장 후 값이 다릅니다 (보낸 값 ${r1(score)} → 저장된 값 ${rows[0].total_score})`);
+  return rows[0];
+}
 function CatBadge({cat}){const c=catOf(cat);return<span style={{fontSize:10,fontWeight:800,padding:"2px 7px",borderRadius:6,background:c.bg,color:c.color,border:`1px solid ${c.bd}`,whiteSpace:"nowrap"}}>{c.label}</span>}
 // ── URL 파라미터 (학생·학부모 딥링크용) ──
 const QS=new URLSearchParams(location.search);
@@ -537,8 +629,9 @@ function gradeOMR(omr,exam,qs){
   saQs.forEach((q,idx)=>{const sa=omr.short_answer?.[String(idx+1)];const ca=String(q.answer).replace(/^0+/,"")||"0";const saStr=sa!=null?String(sa).replace(/^0+/,"")||"0":"";const ok=sa!=null&&saStr===ca;if(!ok)wrong.push(q.question_no);details.push({no:q.question_no,type:"단답형",answer:ca,student_answer:sa,is_correct:ok,score:q.score,chapter:q.chapter,difficulty:q.difficulty})});
   essayQs.forEach(q=>{details.push({no:q.question_no,type:"서술형",answer:q.answer||"—",student_answer:"—",is_correct:null,score:q.score,chapter:q.chapter,difficulty:q.difficulty})});
   details.sort((a,b)=>a.no-b.no);
-  const score=details.filter(d=>d.type!=="서술형"&&d.is_correct).reduce((s,d)=>s+Number(d.score),0);
-  return{wrong:wrong.sort((a,b)=>a-b),score:Math.round(score*10)/10,details};
+  const w=wrong.sort((a,b)=>a-b);
+  // 화면 표시용 객관식 점수도 공용 계산기로 (서술형은 아직 미채점이라 제외됨)
+  return{wrong:w,score:scoreFromDetails(details,w),details};
 }
 
 function OmrTab({apiKey}){
@@ -596,10 +689,10 @@ function OmrTab({apiKey}){
           const correct=omrGraded?!isWrong:null;
           return{no:q.question_no,type:q.question_type,answer:String(q.answer),student_answer:omrGraded?(isWrong?"오답":"정답"):"미채점",is_correct:correct,score:q.score,chapter:q.chapter,difficulty:q.difficulty};
         });
-        const omrPts=omrGraded?details.filter(d=>d.type!=="서술형"&&d.is_correct===true).reduce((s,d)=>s+Number(d.score),0):0;
-        const essayPts=details.filter(d=>d.type==="서술형"&&d.partial_score!=null).reduce((s,d)=>s+d.partial_score,0);
-        const calcScore=Math.round((omrPts+essayPts)*10)/10;
-        return{student:s,exam:ex,wrong:wq,score:calcScore,omr_graded:omrGraded,sub_graded:res.sub_graded,details};
+        // 공용 계산기 사용 (OMR 미채점이면 객관식 0점 취급)
+        const b=computeScore(qs,omrGraded?wq:qs.map(q=>q.question_no),essayFromMap(subMap,s.id));
+        return{student:s,exam:ex,wrong:wq,score:b.total,omr_graded:omrGraded,sub_graded:res.sub_graded,
+               details,storedScore:res.total_score!=null?r1(res.total_score):null};
       });
       setHistResults(built);setStep("history");
     }catch(e){setError(e.message)}
@@ -612,9 +705,7 @@ function OmrTab({apiKey}){
       if(item.type==="서술형")return prev;
       item.is_correct=!item.is_correct;item.student_answer=item.is_correct?"정답":"오답";d[di]=item;
       r.details=d;r.wrong=d.filter(x=>x.type!=="서술형"&&!x.is_correct).map(x=>x.no).sort((a,b)=>a-b);
-      const essayScore=d.filter(x=>x.type==="서술형"&&x.partial_score!=null).reduce((s,x)=>s+x.partial_score,0);
-      const omrScore=d.filter(x=>x.type!=="서술형"&&x.is_correct).reduce((s,x)=>s+Number(x.score),0);
-      r.score=Math.round((omrScore+essayScore)*10)/10;
+      r.score=scoreFromDetails(d,r.wrong);   // 공용 계산기
       next[ri]=r;return next;
     });
   };
@@ -630,9 +721,16 @@ function OmrTab({apiKey}){
         const subRows=essayDetails.map(d=>({exam_id:r.exam.id,student_id:r.student.id,question_no:d.no,is_correct:d.partial_score>=Number(d.score),partial_score:d.partial_score,graded_at:new Date().toISOString()}));
         await sbUpsert("exam_subjective",subRows,"exam_id,student_id,question_no");
       }
-      const subGraded=r.details.filter(d=>d.type==="서술형").every(d=>d.partial_score!=null);
-      await sbUpsert("exam_results",[{exam_id:r.exam.id,student_id:r.student.id,wrong_questions:r.wrong,total_score:r.score,omr_graded:true,sub_graded:subGraded,graded_at:new Date().toISOString()}],"exam_id,student_id");
-      setToast(`${r.student.name} 저장 완료 (${r.score}점)`);setTimeout(()=>setToast(""),2500);
+      const essayLeft=r.details.filter(d=>d.type==="서술형"&&d.partial_score==null).map(d=>d.no);
+      if(essayLeft.length&&!confirm(
+        `⚠️ ${r.student.name} 학생의 서술형 ${essayLeft.join(", ")}번이 아직 채점되지 않았습니다.\n\n`+
+        "이대로 저장하면 서술형을 뺀 반쪽 점수가 저장되고,\n수학관리앱 그래프에는 반영되지 않습니다.\n\n그래도 저장할까요?")){
+        setHistSaving(false);return;
+      }
+      const score=scoreFromDetails(r.details,r.wrong);   // 공용 계산기
+      await saveResultVerified(r.exam.id,r.student.id,r.wrong,score,essayLeft.length===0,r.student.name);
+      setHistResults(p=>p.map((x,i)=>i===ri?{...x,score,storedScore:score}:x));
+      setToast(`${r.student.name} 저장 완료 (${score}점) · 저장 후 재조회로 검증했습니다`);setTimeout(()=>setToast(""),2800);
     }catch(e){setError(e.message)}finally{setHistSaving(false)}
   };
 
@@ -671,7 +769,9 @@ function OmrTab({apiKey}){
       await sbDelete("exam_subjective",`exam_id=eq.${r.exam.id}&student_id=eq.${r.student.id}`);
       await sbDelete("exam_results",`exam_id=eq.${r.exam.id}&student_id=eq.${r.student.id}`);
       // 새 학생으로 저장
-      await sbUpsert("exam_results",[{exam_id:r.exam.id,student_id:newStudent.id,wrong_questions:r.wrong,total_score:r.score,omr_graded:r.omr_graded||true,sub_graded:r.sub_graded||false,graded_at:new Date().toISOString()}],"exam_id,student_id");
+      const movedScore=scoreFromDetails(r.details,r.wrong);   // 공용 계산기
+      const movedDone=r.details.filter(d=>d.type==="서술형").every(d=>d.partial_score!=null);
+      await saveResultVerified(r.exam.id,newStudent.id,r.wrong,movedScore,movedDone,newStudent.name);
       // 서술형 점수가 있으면 새 학생으로 이동
       const subRows=r.details.filter(d=>d.type==="서술형"&&d.partial_score!=null).map(d=>({exam_id:r.exam.id,student_id:newStudent.id,question_no:d.no,is_correct:d.partial_score>=Number(d.score),partial_score:d.partial_score,graded_at:new Date().toISOString()}));
       if(subRows.length>0)await sbUpsert("exam_subjective",subRows,"exam_id,student_id,question_no");
@@ -759,24 +859,23 @@ function OmrTab({apiKey}){
     try{
       const matched=results.filter(r=>r.status==="matched"&&r.student&&r.exam);
 
+      // ── 저장 전 검문: 서술형 미채점 · 유형 이상 문항 ──
+      if(!preflightBeforeSave(matched,qMapState,essayScores)){setSaving(false);return}
+
       for(const r of matched){
         const qs=qMapState[r.exam.id]||[];
         const essayQs=qs.filter(q=>q.question_type==="서술형");
+        // 점수는 공용 계산기로만 (r.score를 더하지 않는다 — 중복·누락의 원인이었음)
+        const b=computeScore(qs,r.wrong,essayFromMap(essayScores,r.student.id));
 
-        // 서술형 점수 합산
-        let essayPts=0;let subGraded=essayQs.length===0;
         if(essayQs.length>0){
           const subRows=essayQs.map(q=>{
             const ps=essayScores[`${r.student.id}-${q.question_no}`];
             return{exam_id:r.exam.id,student_id:r.student.id,question_no:q.question_no,is_correct:ps!=null?(ps>=Number(q.score)):null,partial_score:ps!=null?ps:null,graded_at:new Date().toISOString()};
           });
           await sbUpsert("exam_subjective",subRows,"exam_id,student_id,question_no");
-          essayPts=essayQs.reduce((s,q)=>{const ps=essayScores[`${r.student.id}-${q.question_no}`];return s+(ps!=null?ps:0)},0);
-          subGraded=essayQs.every(q=>essayScores[`${r.student.id}-${q.question_no}`]!=null);
         }
-
-        const totalScore=Math.round((r.score+essayPts)*10)/10;
-        await sbUpsert("exam_results",[{exam_id:r.exam.id,student_id:r.student.id,wrong_questions:r.wrong,total_score:totalScore,omr_graded:true,sub_graded:subGraded,graded_at:new Date().toISOString()}],"exam_id,student_id");
+        await saveResultVerified(r.exam.id,r.student.id,r.wrong,b.total,b.essayDone,r.student.name);
       }
 
       // 결석 학생 판별
@@ -797,7 +896,8 @@ function OmrTab({apiKey}){
     try{
       const qs=qMapState[r.exam.id]||[];
       const essayQs=qs.filter(q=>q.question_type==="서술형");
-      let essayPts=0;let subGraded=essayQs.length===0;
+      if(!preflightBeforeSave([r],qMapState,essayScores)){setSaving(false);return}
+      const b=computeScore(qs,r.wrong,essayFromMap(essayScores,r.student.id));
 
       if(essayQs.length>0){
         const subRows=essayQs.map(q=>{
@@ -805,14 +905,10 @@ function OmrTab({apiKey}){
           return{exam_id:r.exam.id,student_id:r.student.id,question_no:q.question_no,is_correct:ps!=null?(ps>=Number(q.score)):null,partial_score:ps!=null?ps:null,graded_at:new Date().toISOString()};
         });
         await sbUpsert("exam_subjective",subRows,"exam_id,student_id,question_no");
-        essayPts=essayQs.reduce((s,q)=>{const ps=essayScores[`${r.student.id}-${q.question_no}`];return s+(ps!=null?ps:0)},0);
-        subGraded=essayQs.every(q=>essayScores[`${r.student.id}-${q.question_no}`]!=null);
       }
-
-      const totalScore=Math.round((r.score+essayPts)*10)/10;
-      await sbUpsert("exam_results",[{exam_id:r.exam.id,student_id:r.student.id,wrong_questions:r.wrong,total_score:totalScore,omr_graded:true,sub_graded:subGraded,graded_at:new Date().toISOString()}],"exam_id,student_id");
+      await saveResultVerified(r.exam.id,r.student.id,r.wrong,b.total,b.essayDone,r.student.name);
       setSavedSet(prev=>{const next=new Set(prev);next.add(ri);return next});
-      setToast(`${r.student.name} 저장 (OMR ${r.score}+서술형 ${essayPts}=${totalScore}점)`);setTimeout(()=>setToast(""),3000);
+      setToast(`${r.student.name} 저장 · 객관식 ${b.omr} + 서술형 ${b.essay} = ${b.total}점`);setTimeout(()=>setToast(""),3000);
     }catch(err){setError(`저장 실패: ${err.message}`)}finally{setSaving(false)}
   };
 
@@ -901,6 +997,37 @@ function OmrTab({apiKey}){
       {error&&<div className="err-box">{error}</div>}
       {toast&&<div className="toast-box">{toast}</div>}
 
+      {/* ── 저장값 ≠ 재계산값 감시 (교사 전용 화면) ── */}
+      {(()=>{
+        const drifted=histResults.filter(r=>r.storedScore!=null&&Math.abs(r.storedScore-r.score)>0.05);
+        if(!drifted.length)return null;
+        return(
+          <div style={{background:"#FEF2F2",border:"1.5px solid #FECACA",borderRadius:10,padding:"12px 16px",marginBottom:12}}>
+            <div style={{fontSize:13,fontWeight:800,color:"#B91C1C",marginBottom:6}}>
+              ⚠️ DB에 저장된 점수와 다시 계산한 점수가 다른 학생이 {drifted.length}명 있습니다
+            </div>
+            <div style={{fontSize:12,color:"#7F1D1D",lineHeight:1.9}}>
+              {drifted.map(r=><div key={r.student.id}>• {r.student.name}: 저장값 <b>{r.storedScore}</b> → 올바른 값 <b>{r.score}</b></div>)}
+            </div>
+            <button disabled={histSaving} onClick={async()=>{
+              setHistSaving(true);setError(null);
+              const fail=[];
+              for(const r of drifted){
+                try{await patchResultScore(r.exam.id,r.student.id,r.score)}
+                catch(e){fail.push(`${r.student.name}: ${e.message}`)}
+              }
+              setHistResults(p=>p.map(x=>drifted.some(d=>d.student.id===x.student.id)?{...x,storedScore:x.score}:x));
+              setHistSaving(false);
+              if(fail.length)setError("일부 실패\n"+fail.join("\n"));
+              else{setToast(`${drifted.length}명 바로잡았습니다 (재조회 검증 완료)`);setTimeout(()=>setToast(""),3000)}
+            }} style={{marginTop:10,padding:"7px 14px",fontSize:12,fontWeight:700,background:histSaving?"#CBD5E1":"#B91C1C",color:"white",border:"none",borderRadius:7,cursor:histSaving?"default":"pointer"}}>
+              {histSaving?"저장 중…":`${drifted.length}명 저장값 바로잡기`}
+            </button>
+            <div style={{fontSize:11,color:"#9A3412",marginTop:6}}>total_score만 갱신합니다 · 오답·서술형 데이터는 건드리지 않습니다</div>
+          </div>
+        );
+      })()}
+
       {histResults.length===0?<div className="card" style={{textAlign:"center",color:"#999",padding:40}}>채점된 학생이 없습니다</div>:
       <>
         {/* 요약 */}
@@ -961,18 +1088,14 @@ function OmrTab({apiKey}){
                           <div style={{display:"flex",gap:3,flexWrap:"wrap",alignItems:"center"}}>
                             {steps.map(v=><button key={v} onClick={()=>{
                               setHistResults(prev=>{const next=[...prev];const rr={...next[ri]};const dd=[...rr.details];dd[di]={...dd[di],partial_score:v};
-                                rr.details=dd;const ep=dd.filter(x=>x.type==="서술형"&&x.partial_score!=null).reduce((s,x)=>s+x.partial_score,0);
-                                const op=dd.filter(x=>x.type!=="서술형"&&x.is_correct).reduce((s,x)=>s+Number(x.score),0);
-                                rr.score=Math.round((op+ep)*10)/10;next[ri]=rr;return next});
+                                rr.details=dd;rr.score=scoreFromDetails(dd,rr.wrong);next[ri]=rr;return next});
                             }} style={{minWidth:28,height:24,borderRadius:5,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,
                               background:curPs===v?(v===0?"#EF4444":v===max?"#22C55E":"#3B82F6"):"#F0F0F0",
                               color:curPs===v?"white":"#888"}}>{v}</button>)}
                             <input type="number" step="0.5" min="0" max={max} value={curPs!=null&&!steps.includes(curPs)?curPs:""}
                               placeholder="·" onChange={e=>{const val=parseFloat(e.target.value);if(!isNaN(val)&&val>=0&&val<=max){
                                 setHistResults(prev=>{const next=[...prev];const rr={...next[ri]};const dd=[...rr.details];dd[di]={...dd[di],partial_score:val};
-                                  rr.details=dd;const ep=dd.filter(x=>x.type==="서술형"&&x.partial_score!=null).reduce((s,x)=>s+x.partial_score,0);
-                                  const op=dd.filter(x=>x.type!=="서술형"&&x.is_correct).reduce((s,x)=>s+Number(x.score),0);
-                                  rr.score=Math.round((op+ep)*10)/10;next[ri]=rr;return next});
+                                  rr.details=dd;rr.score=scoreFromDetails(dd,rr.wrong);next[ri]=rr;return next});
                               }}} style={{width:36,height:24,borderRadius:5,border:"1.5px solid #DDD",textAlign:"center",fontSize:11,outline:"none"}}/>
                           </div>
                         </td>
@@ -1356,6 +1479,8 @@ function ReportTab({initialExamId,lockStudentId,onBack}={}){
   const[si,setSi]=useState(0);
   const[err,setErr]=useState(null);
   const[histData,setHistData]=useState({});
+  const[fixing,setFixing]=useState(false);      // 정합성 경고 배너의 [바로잡기]
+  const[fixMsg,setFixMsg]=useState("");
 
   useEffect(()=>{if(step==="select")sbGet("exams?status=eq.approved&order=created_at.desc").then(d=>{setExams(d);}).catch(e=>setErr(e.message))},[step]);
 
@@ -1428,15 +1553,16 @@ function ReportTab({initialExamId,lockStudentId,onBack}={}){
 
   const st=swr[si]||swr[0];
   const res=results[st.id],wq=res?.wrong_questions||[];
-  // 점수 직접 계산: OMR(맞은 문항 배점 합) + 서술형(부분점수 합)
-  const calcStudentScore=(studentId,wrongQs)=>{
-    const omrPts=qs.filter(q=>q.question_type!=="서술형"&&!wrongQs.includes(q.question_no)).reduce((s,q)=>s+Number(q.score),0);
-    const essayPts=qs.filter(q=>q.question_type==="서술형").reduce((s,q)=>{const ps=subScores[`${studentId}-${q.question_no}`];return s+(ps!=null?ps:0)},0);
-    return Math.round((omrPts+essayPts)*10)/10;
-  };
-  const score=calcStudentScore(st.id,wq);
+  // 점수는 공용 함수 computeScore 하나로만 계산한다 (저장·목록·분석지 동일)
+  const calcStudentScore=(studentId,wrongQs)=>computeScore(qs,wrongQs,essayFromMap(subScores,studentId)).total;
+  const breakdown=computeScore(qs,wq,essayFromMap(subScores,st.id));
+  const score=breakdown.total;
   // ⚠️ 반평균은 반드시 반 전체(allSwr) 기준 — 학생 잠금 모드에서도 동일해야 함
   const avg=allSwr.length?Math.round((allSwr.reduce((s,student)=>{const r2=results[student.id];return s+calcStudentScore(student.id,r2?.wrong_questions||[])},0)/allSwr.length)*10)/10:0;
+
+  // ── 저장값과 재계산값이 갈라졌는지 감시 (교사 화면에만 노출) ──
+  const storedScore=res&&res.total_score!=null?r1(res.total_score):null;
+  const drift=storedScore!=null&&Math.abs(storedScore-score)>0.05;
 
   const diffWeight={"최상":6,"상":5,"중상":4,"중":3,"중하":2,"하":1};
   const qWrongCounts={};qs.forEach(q=>qWrongCounts[q.question_no]=0);allRes.forEach(r=>{(r.wrong_questions||[]).forEach(w=>{if(qWrongCounts[w]!=null)qWrongCounts[w]++})});
@@ -1472,6 +1598,37 @@ function ReportTab({initialExamId,lockStudentId,onBack}={}){
         )}
         <button onClick={()=>window.print()} style={{padding:"8px 16px",fontSize:12,fontWeight:600,background:RC.primary,color:"white",border:"none",borderRadius:8,cursor:"pointer",whiteSpace:"nowrap"}}>🖨 인쇄</button>
       </div>
+
+      {/* ── 정합성 경고 · 교사 화면 전용 (locked = 학생·학부모 딥링크에는 절대 안 뜸) ── */}
+      {!locked&&(drift||breakdown.unknown.length>0||!breakdown.essayDone)&&(
+        <div className="no-print" style={{margin:"12px 20px 0",background:"#FEF2F2",border:"1.5px solid #FECACA",borderRadius:10,padding:"12px 16px"}}>
+          <div style={{fontSize:13,fontWeight:800,color:"#B91C1C",marginBottom:6}}>⚠️ 이 학생 점수에 확인할 점이 있습니다 (학부모 화면에는 표시되지 않습니다)</div>
+          <div style={{fontSize:12,color:"#7F1D1D",lineHeight:1.8}}>
+            {drift&&<div>
+              • DB에 저장된 점수 <b>{storedScore}점</b> ≠ 지금 계산한 점수 <b>{score}점</b><br/>
+              <span style={{paddingLeft:10,color:"#9A3412"}}>내역: 객관식 {breakdown.omr} + 서술형 {breakdown.essay} = {score}점</span>
+            </div>}
+            {!breakdown.essayDone&&<div>• 서술형 <b>{breakdown.essayMissing.join(", ")}번</b>이 아직 채점되지 않았습니다 (0점으로 두지 않고 제외해 계산했습니다)</div>}
+            {breakdown.unknown.length>0&&<div>• 문항 유형이 선택형·단답형·서술형 중 어디에도 안 맞는 문항: <b>{breakdown.unknown.join(", ")}번</b> — 문항등록에서 유형을 고쳐 주세요</div>}
+          </div>
+          {drift&&<div style={{marginTop:10,display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+            <button disabled={fixing} onClick={async()=>{
+              setFixing(true);setFixMsg("");
+              try{
+                await patchResultScore(exam.id,st.id,score);
+                setResults(p=>({...p,[st.id]:{...p[st.id],total_score:score}}));
+                setAllRes(p=>p.map(x=>String(x.student_id)===String(st.id)?{...x,total_score:score}:x));
+                setFixMsg(`✅ ${storedScore} → ${score}점으로 바로잡았습니다 (저장 후 재조회로 검증 완료)`);
+              }catch(e){setFixMsg("❌ "+e.message)}
+              finally{setFixing(false)}
+            }} style={{padding:"7px 14px",fontSize:12,fontWeight:700,background:fixing?"#CBD5E1":"#B91C1C",color:"white",border:"none",borderRadius:7,cursor:fixing?"default":"pointer"}}>
+              {fixing?"저장 중…":`저장값을 ${score}점으로 바로잡기`}
+            </button>
+            <span style={{fontSize:11,color:"#9A3412"}}>total_score만 갱신합니다 · 오답·서술형 데이터는 그대로</span>
+          </div>}
+          {fixMsg&&<div style={{marginTop:8,fontSize:12,fontWeight:700,color:fixMsg[0]==="✅"?"#15803D":"#B91C1C"}}>{fixMsg}</div>}
+        </div>
+      )}
 
       <div style={{padding:"28px 28px 20px"}}>
         <div style={{marginBottom:20}}>
