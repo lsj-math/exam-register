@@ -10,7 +10,9 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'Pretendard',-apple-system,'Malgun Gothic',sans-serif;background:#F7F7F5}
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%}  /* 카톡·밴드 내부 브라우저의 글자 자동확대로 레이아웃이 깨지는 것 방지 */
+body{font-family:'Pretendard',-apple-system,'Malgun Gothic',sans-serif;background:#F7F7F5;
+     word-break:keep-all;overflow-wrap:break-word}          /* 한글은 단어 단위로 줄바꿈 */
 @keyframes spin{to{transform:rotate(360deg)}}
 .prog-bar{height:6px;background:#E5E7EB;border-radius:3px;overflow:hidden;margin-top:12px}
 .prog-fill{height:100%;background:#2B4A6F;border-radius:3px;transition:width 0.3s}
@@ -1737,7 +1739,7 @@ function ReportTab({initialExamId,lockStudentId,onBack}={}){
 
   return(
     <div className="report-wrap" style={{maxWidth:760,margin:"0 auto",background:RC.light,minHeight:"100vh"}}>
-      <div className="no-print" style={{padding:"12px 20px",display:"flex",gap:8,alignItems:"center",background:"white",borderBottom:`1px solid ${RC.border}`}}>
+      <div className="no-print" style={{padding:"10px clamp(10px,3vw,20px)",display:"flex",gap:"clamp(5px,1.6vw,8px)",alignItems:"center",background:"white",borderBottom:`1px solid ${RC.border}`}}>
         {locked?(
           <>
             {onBack&&<button onClick={onBack} style={{padding:"8px 14px",fontSize:12,background:"white",color:RC.sub,border:`1px solid ${RC.border}`,borderRadius:8,cursor:"pointer",whiteSpace:"nowrap"}}>← 회차 목록</button>}
@@ -1788,54 +1790,54 @@ function ReportTab({initialExamId,lockStudentId,onBack}={}){
         </div>
       )}
 
-      <div style={{padding:"28px 28px 20px"}}>
+      <div style={{padding:"clamp(16px,4vw,28px) clamp(14px,4vw,28px) 20px"}}>
         <div style={{marginBottom:20}}>
-          <h1 style={{fontSize:28,fontWeight:800,color:RC.text}}>{exam.class_name?.replace(/\[SNT\]\s*/,"")}</h1>
-          <h2 style={{fontSize:22,fontWeight:700,color:RC.text,marginTop:6}}>{exam.title}</h2>
-          <div style={{fontSize:16,fontWeight:700,color:RC.accent,marginTop:10}}>성적 분석 리포트</div>
-          <div style={{fontSize:14,color:RC.sub,marginTop:14}}>학생: <b style={{color:RC.text}}>{st.name}</b></div>
+          <h1 style={{fontSize:"clamp(19px,5.4vw,28px)",fontWeight:800,color:RC.text,lineHeight:1.3}}>{exam.class_name?.replace(/\[SNT\]\s*/,"")}</h1>
+          <h2 style={{fontSize:"clamp(16px,4.4vw,22px)",fontWeight:700,color:RC.text,marginTop:6,lineHeight:1.35}}>{exam.title}</h2>
+          <div style={{fontSize:"clamp(13px,3.4vw,16px)",fontWeight:700,color:RC.accent,marginTop:10}}>성적 분석 리포트</div>
+          <div style={{fontSize:"clamp(12px,3vw,14px)",color:RC.sub,marginTop:14}}>학생: <b style={{color:RC.text}}>{st.name}</b></div>
         </div>
 
-        <div style={{background:RC.accent,borderRadius:12,padding:"22px 30px",color:"white",display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:24}}>
-          <div style={{fontSize:46,fontWeight:900,lineHeight:1}}>{score}점</div>
-          <div style={{textAlign:"right"}}><div style={{fontSize:14,fontWeight:700,opacity:0.9,marginBottom:6}}>총 문항수 {qs.length}문항</div><div style={{fontSize:12,fontWeight:500,opacity:0.75}}>{exam.structure||""}</div></div>
+        <div style={{background:RC.accent,borderRadius:12,padding:"clamp(16px,4vw,22px) clamp(16px,5vw,30px)",color:"white",display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,flexWrap:"wrap",marginBottom:24}}>
+          <div style={{fontSize:"clamp(29px,9vw,46px)",fontWeight:900,lineHeight:1,whiteSpace:"nowrap"}}>{score}점</div>
+          <div style={{textAlign:"right",minWidth:0}}><div style={{fontSize:"clamp(11px,2.9vw,14px)",fontWeight:700,opacity:0.9,marginBottom:6,whiteSpace:"nowrap"}}>총 문항수 {qs.length}문항</div><div style={{fontSize:"clamp(9.5px,2.4vw,12px)",fontWeight:500,opacity:0.75,lineHeight:1.5}}>{exam.structure||""}</div></div>
         </div>
 
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:14,marginBottom:24}}>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:"clamp(7px,2vw,14px)",marginBottom:24}}>
           {[{l:"반 평균",v:`${avg}점`,s:"전체 응시생 기준"},{l:"변별력 문항",v:hardestQs.map(q=>q.question_no+"번").join(", ")},{l:"전체 난도",v:diffRevMap[avgDiff]||"중"}].map(x=>(
-            <div key={x.l} style={{background:"white",borderRadius:12,padding:"18px 12px",textAlign:"center",border:`1px solid ${RC.border}`}}>
-              <div style={{fontSize:12,color:RC.accent,fontWeight:700,marginBottom:8}}>{x.l}</div>
-              <div style={{fontSize:x.v.length>8?18:24,fontWeight:800,color:RC.text}}>{x.v}</div>
-              {x.s&&<div style={{fontSize:11,color:RC.sub,marginTop:6}}>{x.s}</div>}
+            <div key={x.l} style={{background:"white",borderRadius:12,padding:"clamp(12px,3vw,18px) clamp(5px,1.6vw,12px)",textAlign:"center",border:`1px solid ${RC.border}`,minWidth:0}}>
+              <div style={{fontSize:"clamp(10px,2.5vw,12px)",color:RC.accent,fontWeight:700,marginBottom:8}}>{x.l}</div>
+              <div style={{fontSize:x.v.length>8?"clamp(12px,3.1vw,18px)":"clamp(15px,4.2vw,24px)",fontWeight:800,color:RC.text,lineHeight:1.3,wordBreak:"keep-all"}}>{x.v}</div>
+              {x.s&&<div style={{fontSize:"clamp(9px,2.2vw,11px)",color:RC.sub,marginTop:6,lineHeight:1.4}}>{x.s}</div>}
             </div>
           ))}
         </div>
 
-        <div className="no-break" style={{background:"white",borderRadius:12,padding:"22px 24px",border:`1px solid ${RC.border}`,marginBottom:24}}>
-          <div style={{fontSize:12,color:RC.accent,fontWeight:700,marginBottom:10}}>코멘트</div>
-          {comments.map((l,i)=><p key={i} style={{fontSize:13.5,lineHeight:1.85,color:"#444",marginBottom:i<comments.length-1?12:0}}>{l}</p>)}
+        <div className="no-break" style={{background:"white",borderRadius:12,padding:"clamp(16px,4vw,22px) clamp(14px,4vw,24px)",border:`1px solid ${RC.border}`,marginBottom:24}}>
+          <div style={{fontSize:"clamp(11px,2.7vw,12px)",color:RC.accent,fontWeight:700,marginBottom:10}}>코멘트</div>
+          {comments.map((l,i)=><p key={i} style={{fontSize:"clamp(12.5px,3.1vw,13.5px)",lineHeight:1.85,color:"#444",marginBottom:i<comments.length-1?12:0}}>{l}</p>)}
         </div>
 
-        <div className="no-break" style={{background:"white",borderRadius:12,padding:"26px 20px",border:`1px solid ${RC.border}`,marginBottom:24}}>
+        <div className="no-break" style={{background:"white",borderRadius:12,padding:"clamp(18px,4.5vw,26px) clamp(12px,3.5vw,20px)",border:`1px solid ${RC.border}`,marginBottom:24}}>
           <div style={{fontSize:11,color:RC.accent,fontWeight:700,letterSpacing:1,marginLeft:4}}>MASTERY</div>
-          <div style={{fontSize:20,fontWeight:800,color:RC.text,marginTop:4,marginBottom:20,marginLeft:4}}>단원별 성취도</div>
+          <div style={{fontSize:"clamp(16px,4.2vw,20px)",fontWeight:800,color:RC.text,marginTop:4,marginBottom:20,marginLeft:4}}>단원별 성취도</div>
           <RadarChart labels={chScores.map(c=>c.name)} values={chScores.map(c=>c.score)} avgValues={avgScores} size={320}/>
-          <div style={{display:"flex",justifyContent:"center",gap:30,flexWrap:"wrap",marginTop:20}}>
-            {chScores.map(ch=><div key={ch.name} style={{textAlign:"center",minWidth:60}}>
-              <div style={{fontSize:13,fontWeight:700,color:RC.text}}>{ch.name}</div>
-              <div style={{fontSize:22,fontWeight:800,color:RC.accent,margin:"2px 0"}}>{ch.score}%</div>
-              <div style={{fontSize:11,color:RC.sub}}>{ch.correct}/{ch.total} 정답</div>
+          <div style={{display:"flex",justifyContent:"center",gap:"clamp(10px,3.5vw,30px)",flexWrap:"wrap",marginTop:20}}>
+            {chScores.map(ch=><div key={ch.name} style={{textAlign:"center",minWidth:64,maxWidth:110}}>
+              <div style={{fontSize:"clamp(11px,2.8vw,13px)",fontWeight:700,color:RC.text,lineHeight:1.35,wordBreak:"keep-all"}}>{ch.name}</div>
+              <div style={{fontSize:"clamp(17px,4.6vw,22px)",fontWeight:800,color:RC.accent,margin:"2px 0"}}>{ch.score}%</div>
+              <div style={{fontSize:"clamp(9.5px,2.3vw,11px)",color:RC.sub}}>{ch.correct}/{ch.total} 정답</div>
             </div>)}
           </div>
         </div>
 
         <div className="page-break" style={{marginTop:24}}>
           <div style={{fontSize:11,color:RC.accent,fontWeight:700,letterSpacing:1}}>FULL RESULTS</div>
-          <h2 style={{fontSize:22,fontWeight:800,color:RC.text,marginTop:4,marginBottom:16}}>전체 문항 결과</h2>
+          <h2 style={{fontSize:"clamp(16px,4.4vw,22px)",fontWeight:800,color:RC.text,marginTop:4,marginBottom:16}}>전체 문항 결과</h2>
           {qs.map(q=>{const isW=wq.includes(q.question_no),dc=diffMap[q.difficulty]||{bg:"#F5F5F5",text:"#666"};
-            return<div key={q.question_no} style={{display:"flex",alignItems:"center",gap:12,padding:"11px 14px",background:"white",borderRadius:10,marginBottom:6,border:`1px solid ${isW?"#FECACA":RC.border}`}}>
+            return<div key={q.question_no} style={{display:"flex",alignItems:"center",gap:"clamp(7px,2vw,12px)",padding:"11px clamp(9px,2.6vw,14px)",background:"white",borderRadius:10,marginBottom:6,border:`1px solid ${isW?"#FECACA":RC.border}`}}>
               <div style={{width:32,height:32,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",background:isW?"#FEE2E2":"#F0FDF4",color:isW?"#DC2626":"#16A34A",fontWeight:800,fontSize:14}}>{q.question_no}</div>
-              <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:RC.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{q.topic}</div><div style={{fontSize:11,color:RC.sub}}>{q.chapter} · {q.score}점</div></div>
+              <div style={{flex:1,minWidth:0}}><div style={{fontSize:"clamp(11.5px,2.9vw,13px)",fontWeight:600,color:RC.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{q.topic}</div><div style={{fontSize:"clamp(9.5px,2.3vw,11px)",color:RC.sub,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{q.chapter} · {q.score}점</div></div>
               <span style={{fontSize:10,padding:"3px 10px",borderRadius:20,background:dc.bg,color:dc.text,fontWeight:600,flexShrink:0}}>{q.difficulty}</span>
               <span style={{fontSize:16,fontWeight:800,width:22,textAlign:"center",color:isW?"#EF4444":"#22C55E"}}>{isW?"✗":"✓"}</span>
             </div>;
