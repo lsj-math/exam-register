@@ -2013,7 +2013,7 @@ function ReportTab({initialExamId,lockStudentId,onBack}={}){
   /* ── 최우선 오답 ──
      이 학생이 틀린 문항 중에서, 반 정답률이 높은 것부터.
      "남들은 다 맞혔는데 나만 틀린 문항" = 가장 먼저 메워야 할 구멍.        */
-  const priorityWrong=qs
+  const priorityPool=qs
     .filter(q=>{
       if(q.question_type==="서술형"){
         const v=subScores[`${st.id}-${q.question_no}`];
@@ -2023,8 +2023,16 @@ function ReportTab({initialExamId,lockStudentId,onBack}={}){
     })
     .map(q=>({q,rate:qRates[q.question_no]}))
     .filter(x=>x.rate!=null)
-    .sort((a,b)=>(b.rate-a.rate)||((diffWeight[a.q.difficulty]||3)-(diffWeight[b.q.difficulty]||3)))
-    .slice(0,5);
+    .sort((a,b)=>(b.rate-a.rate)||((diffWeight[a.q.difficulty]||3)-(diffWeight[b.q.difficulty]||3)));
+  /* 표시 규칙
+     · 상위 3개는 정답률과 무관하게 무조건 보여준다 (오답이 3개뿐일 수도 있으므로)
+     · 4~5번째는 반 정답률 30% 이상일 때만 추가한다
+       — 반 전체가 못 푼 문항까지 "최우선"으로 올리면 우선순위가 흐려짐   */
+  const PRIORITY_MIN_RATE=30;
+  const priorityWrong=[
+    ...priorityPool.slice(0,3),
+    ...priorityPool.slice(3,5).filter(x=>x.rate>=PRIORITY_MIN_RATE)
+  ];
   let totalDiff=0;qs.forEach(q=>totalDiff+=(diffWeight[q.difficulty]||3));const avgDiff=qs.length?Math.round(totalDiff/qs.length):3;
   const diffRevMap={6:"최상",5:"상",4:"중상",3:"중",2:"중하",1:"하"};
 
@@ -2165,7 +2173,7 @@ function ReportTab({initialExamId,lockStudentId,onBack}={}){
           <div style={{fontSize:11,color:RC.accent,fontWeight:700,letterSpacing:1}}>FULL RESULTS</div>
           <h2 style={{fontSize:"clamp(16px,4.4vw,22px)",fontWeight:800,color:RC.text,marginTop:4,marginBottom:4}}>전체 문항 결과</h2>
           <div style={{fontSize:"clamp(9.5px,2.4vw,11px)",color:RC.sub,marginBottom:14}}>
-            가운데 <b style={{color:RC.text}}>%</b>는 이 문항을 맞힌 <b style={{color:RC.text}}>반 전체 학생 비율</b>입니다{takerCount?` (응시 ${takerCount}명)`:""}.
+            가운데 <b style={{color:RC.text}}>%</b>는 이 문항을 맞힌 <b style={{color:RC.text}}>반 전체 학생 비율</b>입니다.
           </div>
           {qs.map(q=>{const isW=wq.includes(q.question_no),dc=diffMap[q.difficulty]||{bg:"#F5F5F5",text:"#666"};
             return<div key={q.question_no} style={{display:"flex",alignItems:"center",gap:"clamp(7px,2vw,12px)",padding:"11px clamp(9px,2.6vw,14px)",background:"white",borderRadius:10,marginBottom:6,border:`1px solid ${isW?"#FECACA":RC.border}`}}>
@@ -2173,8 +2181,8 @@ function ReportTab({initialExamId,lockStudentId,onBack}={}){
               <div style={{flex:1,minWidth:0}}><div style={{fontSize:"clamp(11.5px,2.9vw,13px)",fontWeight:600,color:RC.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{q.topic}</div><div style={{fontSize:"clamp(9.5px,2.3vw,11px)",color:RC.sub,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{q.chapter} · {q.score}점</div></div>
               {/* 반 정답률 — 유형과 난이도 사이 */}
               {(()=>{const rr=qRates[q.question_no],rc=rateColor(rr);
-                return<span title="이 문항을 맞힌 학생 비율" style={{fontSize:"clamp(9.5px,2.4vw,11px)",fontWeight:800,padding:"3px 7px",borderRadius:7,background:rc.bg,color:rc.text,flexShrink:0,whiteSpace:"nowrap"}}>
-                  {rr==null?"—":`${rr}%`}
+                return<span title="이 문항을 맞힌 반 전체 학생 비율" style={{fontSize:"clamp(9.5px,2.4vw,11px)",fontWeight:800,padding:"3px 7px",borderRadius:7,background:rc.bg,color:rc.text,flexShrink:0,whiteSpace:"nowrap"}}>
+                  <span style={{fontSize:"0.76em",fontWeight:700,opacity:0.72,marginRight:3}}>정답률</span>{rr==null?"—":`${rr}%`}
                 </span>;})()}
               <span style={{fontSize:10,padding:"3px 10px",borderRadius:20,background:dc.bg,color:dc.text,fontWeight:600,flexShrink:0}}>{q.difficulty}</span>
               <span style={{fontSize:16,fontWeight:800,width:22,textAlign:"center",color:isW?"#EF4444":"#22C55E"}}>{isW?"✗":"✓"}</span>
