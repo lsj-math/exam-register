@@ -1353,6 +1353,25 @@ function RadarChart({labels,values,avgValues,size=320}){
   </svg>;
 }
 
+/* ══════════════════════════════════════════════════════════════
+   학부모 코멘트 생성
+   ──────────────────────────────────────────────────────────────
+   ⚠️ 회차마다·학생마다 문장이 달라지도록 설계했습니다.
+
+   1) 문장마다 3가지 표현을 두고, 학생ID+시험ID로 만든 값으로 하나를 고릅니다.
+      → 같은 학생의 같은 회차는 몇 번을 열어도 항상 같은 문장입니다.
+        (학부모가 다시 열었을 때 글이 바뀌면 신뢰를 잃으므로 무작위를 쓰지 않습니다)
+      → 학생이 다르면, 회차가 다르면 표현이 달라집니다.
+
+   2) '회차 맥락' 문단을 따로 둡니다. 1회차는 기준점, 2회차부터는 직전 대비 변화,
+      3회차부터는 누적 추세를 이야기하므로 회차가 올라갈수록 내용이 자연히 달라집니다.
+   ══════════════════════════════════════════════════════════════ */
+function __hashStr(s){
+  let h=2166136261;s=String(s);
+  for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)}
+  return h>>>0;
+}
+
 function genComment(score,avg,chScores,wq,qs,exam,stName,avgDiff,allRes,histData,studentId){
   const fn=stName.length>=3?stName.slice(1):stName;
   const sorted=[...chScores].sort((a,b)=>a.score-b.score);
@@ -1368,120 +1387,234 @@ function genComment(score,avg,chScores,wq,qs,exam,stName,avgDiff,allRes,histData
   const gap=Math.round(Math.abs(score-avg)*10)/10;
   const p=[];
 
-  // ── 0. 시험 난이도 맥락 ──
+  // ── 변형 선택기 (학생·시험 조합으로 고정) ──
+  const SEED=`${studentId}|${exam.id}`;
+  const V=(salt,...opts)=>opts[__hashStr(SEED+"|"+salt)%opts.length];
+
+  const nos=list=>list.map(q=>q.question_no).sort((a,b)=>a-b).join(", ");
+  const chList=list=>list.map(c=>c.name).join(", ");
+
+  // ── 과거 회차 정보 ──
+  const histEntries=Object.values(histData||{}).sort((a,b)=>new Date(a.exam.created_at)-new Date(b.exam.created_at));
+  const pastChScores=[];
+  histEntries.forEach(h=>{
+    const hRes=h.results.find(r=>String(r.student_id)===String(studentId));
+    if(!hRes)return;
+    const hWq=hRes.wrong_questions||[];
+    const hChMap={};h.qs.forEach(q=>{const key=q.sub_chapter||q.chapter;if(!hChMap[key])hChMap[key]=[];hChMap[key].push(q)});
+    const sc={};Object.entries(hChMap).forEach(([name,qList])=>{
+      const correct=qList.filter(q=>!hWq.includes(q.question_no)).length;
+      sc[name]=Math.round((correct/qList.length)*100);
+    });
+    pastChScores.push({title:h.exam.title,score:hRes.total_score,chScores:sc});
+  });
+  const roundNo=Number(exam.round)||(pastChScores.length+1);
+
+  // ══ 문단 0. 인사 + 시험 난이도 맥락 ══
   const avgRate=Math.round((avg/total)*100);
-  let diffContext=`안녕하세요, ${fn} 학생의 ${exam.title} 결과를 안내드립니다. `;
+  const hello=V("hello",
+    `안녕하세요, ${fn} 학생의 ${exam.title} 결과를 안내드립니다. `,
+    `안녕하세요. ${fn} 학생의 ${exam.title} 응시 결과를 정리해 말씀드립니다. `,
+    `${fn} 학생의 ${exam.title} 성적 분석 결과를 안내드립니다. `);
+  let diffContext=hello;
   if(avgDiff>=4.5||avgRate<45){
-    diffContext+=`이번 시험은 전체적으로 난이도가 높게 출제되었습니다. 반 평균이 ${avg}점(${avgRate}%)으로 형성된 데서 알 수 있듯이, 대부분의 학생이 어려움을 겪은 시험이었습니다. 따라서 점수 자체에 지나치게 무게를 두기보다는, 어떤 유형에서 실점이 발생했는지를 중심으로 분석하는 것이 더 의미 있습니다.`;
+    diffContext+=V("d1",
+      `이번 시험은 전체적으로 난이도가 높게 출제되었습니다. 반 평균이 ${avg}점(${avgRate}%)으로 형성된 데서 알 수 있듯이, 대부분의 학생이 어려움을 겪은 시험이었습니다. 따라서 점수 자체에 지나치게 무게를 두기보다는, 어떤 유형에서 실점이 발생했는지를 중심으로 분석하는 것이 더 의미 있습니다.`,
+      `이번 회차는 변별력을 크게 둔 구성이었습니다. 반 평균이 ${avg}점(${avgRate}%)에 머문 것에서 보이듯 상위권도 만점을 확보하기 쉽지 않은 시험이었으므로, 절대 점수보다 어떤 유형에서 막혔는지를 읽는 것이 중요합니다.`,
+      `출제 난이도가 상당히 높았던 회차입니다. 반 평균 ${avg}점(${avgRate}%)이라는 수치가 그 점을 보여줍니다. 이런 시험은 점수 등락이 크게 나타나므로, 결과보다 풀이 과정에서 드러난 약점을 짚는 데 의미를 두시면 좋겠습니다.`);
   }else if(avgDiff>=3.5||avgRate<55){
-    diffContext+=`이번 시험은 중상 수준의 난이도로 출제되었으며, 반 평균은 ${avg}점(${avgRate}%)입니다. 기본 개념만으로 풀 수 있는 문항과 응용력이 필요한 문항이 균형 있게 배치된 구성이었습니다.`;
+    diffContext+=V("d2",
+      `이번 시험은 중상 수준의 난이도로 출제되었으며, 반 평균은 ${avg}점(${avgRate}%)입니다. 기본 개념만으로 풀 수 있는 문항과 응용력이 필요한 문항이 균형 있게 배치된 구성이었습니다.`,
+      `난이도는 중상 정도로 형성되었고 반 평균은 ${avg}점(${avgRate}%)입니다. 개념 확인 문항과 응용 문항이 고르게 섞여 있어, 학습의 완성도가 점수 차이로 비교적 정직하게 드러나는 시험이었습니다.`,
+      `이번 회차는 중상 난이도로, 반 평균이 ${avg}점(${avgRate}%)으로 나타났습니다. 기본기만으로 해결되는 문항과 한 단계 더 사고가 필요한 문항이 섞여 있어 실력 구간이 잘 갈리는 구성이었습니다.`);
   }else if(avgDiff>=2.5||avgRate<70){
-    diffContext+=`이번 시험은 전반적으로 중간 수준의 난이도로 출제되었습니다. 반 평균이 ${avg}점(${avgRate}%)으로, 교과 개념을 충실히 학습한 학생이라면 안정적으로 득점할 수 있는 구성이었습니다. 이런 시험에서는 기본 문항의 실수 관리가 곧 점수와 직결됩니다.`;
+    diffContext+=V("d3",
+      `이번 시험은 전반적으로 중간 수준의 난이도로 출제되었습니다. 반 평균이 ${avg}점(${avgRate}%)으로, 교과 개념을 충실히 학습한 학생이라면 안정적으로 득점할 수 있는 구성이었습니다. 이런 시험에서는 기본 문항의 실수 관리가 곧 점수와 직결됩니다.`,
+      `난이도는 중간 수준이었고 반 평균은 ${avg}점(${avgRate}%)입니다. 개념을 성실히 다져온 학생이라면 무난히 득점할 수 있는 시험이었던 만큼, 사소한 실수 하나가 등수에 미치는 영향이 큰 회차였습니다.`,
+      `이번 회차의 난이도는 보통 수준으로, 반 평균 ${avg}점(${avgRate}%)이 형성되었습니다. 이런 구성에서는 새로운 유형을 익히는 것보다 이미 아는 유형을 실수 없이 처리하는 힘이 점수를 좌우합니다.`);
   }else{
-    diffContext+=`이번 시험은 비교적 평이한 난이도로 출제되어, 반 평균이 ${avg}점(${avgRate}%)으로 높게 형성되었습니다. 이런 구성에서는 실수 없이 꼼꼼하게 풀어내는 것이 특히 중요하며, 한두 문항의 실수가 전체 순위에 큰 영향을 미칠 수 있습니다.`;
+    diffContext+=V("d4",
+      `이번 시험은 비교적 평이한 난이도로 출제되어, 반 평균이 ${avg}점(${avgRate}%)으로 높게 형성되었습니다. 이런 구성에서는 실수 없이 꼼꼼하게 풀어내는 것이 특히 중요하며, 한두 문항의 실수가 전체 순위에 큰 영향을 미칠 수 있습니다.`,
+      `평이한 난이도로 출제된 회차이며 반 평균은 ${avg}점(${avgRate}%)입니다. 대부분의 학생이 고득점 구간에 몰려 있어, 한 문항의 실수가 곧바로 순위 변동으로 이어지는 시험이었습니다.`,
+      `이번 회차는 부담이 크지 않은 난이도였고, 반 평균이 ${avg}점(${avgRate}%)까지 올라왔습니다. 이런 시험일수록 아는 문제를 끝까지 정확하게 마무리하는 습관이 결과를 가릅니다.`);
   }
   p.push(diffContext);
 
-  // ── 1. 결과 요약 ──
-  let s1=`${fn} 학생은 ${score}점을 받았습니다. `;
+  // ══ 문단 1. 결과 요약 ══
+  let s1=V("r0",
+    `${fn} 학생은 ${score}점을 받았습니다. `,
+    `${fn} 학생의 이번 회차 점수는 ${score}점입니다. `,
+    `${fn} 학생은 이번 시험에서 ${score}점을 기록했습니다. `);
   if(score>=avg+10){
-    s1+=`평균을 ${gap}점 상회하는 결과로, 시험 난이도를 감안했을 때 현재까지의 학습이 안정적으로 이루어지고 있음을 확인할 수 있습니다.`;
+    s1+=V("r1",
+      `평균을 ${gap}점 상회하는 결과로, 시험 난이도를 감안했을 때 현재까지의 학습이 안정적으로 이루어지고 있음을 확인할 수 있습니다.`,
+      `반 평균보다 ${gap}점 높은 결과입니다. 이 정도 난이도에서 이만큼의 격차를 만들었다는 것은 개념과 응용이 모두 자리를 잡았다는 뜻입니다.`,
+      `평균 대비 ${gap}점 앞선 성적으로, 상위 구간을 안정적으로 유지하고 있습니다. 지금의 학습 방식을 흔들지 않고 이어가는 것이 좋겠습니다.`);
   }else if(score>=avg){
-    s1+=`평균 부근의 결과이며, 기본기는 갖추어져 있으나 고난도 영역에서의 득점력을 한 단계 끌어올릴 수 있는 여지가 남아 있습니다.`;
+    s1+=V("r2",
+      `평균 부근의 결과이며, 기본기는 갖추어져 있으나 고난도 영역에서의 득점력을 한 단계 끌어올릴 수 있는 여지가 남아 있습니다.`,
+      `평균을 ${gap}점 웃도는 결과입니다. 기본 개념은 무리 없이 소화하고 있으므로, 이제는 변별력 문항에서 한두 개를 더 가져오는 것이 다음 목표가 되겠습니다.`,
+      `반 평균과 비슷하거나 조금 앞선 위치입니다. 토대는 만들어져 있으니, 상위권과의 격차를 만드는 고난도 유형에 시간을 배분하면 상승 여력이 충분합니다.`);
   }else if(score>=avg-10){
-    s1+=`평균 대비 다소 아쉬운 결과이지만, 아래에서 말씀드릴 보완 포인트를 집중적으로 잡아주면 충분히 끌어올릴 수 있는 범위입니다.`;
+    s1+=V("r3",
+      `평균 대비 다소 아쉬운 결과이지만, 아래에서 말씀드릴 보완 포인트를 집중적으로 잡아주면 충분히 끌어올릴 수 있는 범위입니다.`,
+      `평균에 ${gap}점 못 미쳤습니다. 다만 격차가 크지 않아, 아래에 정리한 취약 유형 몇 가지만 정리하면 금방 따라붙을 수 있는 거리입니다.`,
+      `아쉽게 평균을 ${gap}점 밑돌았습니다. 실력의 문제라기보다 특정 유형에서 반복적으로 점수가 새고 있는 형태이므로, 그 지점만 막으면 회복이 빠를 것으로 봅니다.`);
   }else{
-    s1+=`평균과의 격차가 있는 만큼, 이번 시험을 기점으로 취약 단원에 대한 집중 보완이 필요한 시점입니다.`;
+    s1+=V("r4",
+      `평균과의 격차가 있는 만큼, 이번 시험을 기점으로 취약 단원에 대한 집중 보완이 필요한 시점입니다.`,
+      `평균과 ${gap}점 차이가 납니다. 여러 단원에 걸쳐 실점이 나타나고 있어, 범위를 넓게 잡기보다 취약 단원을 좁혀 하나씩 메우는 방식이 필요한 시기입니다.`,
+      `현재 평균과의 간격이 ${gap}점입니다. 이번 회차를 출발점으로 삼아 기본 개념부터 다시 정리하는 시간을 확보하는 것이 우선이라고 판단됩니다.`);
   }
   p.push(s1);
 
-  // ── 2. 성취도 분석 ──
+  // ══ 문단 2. 회차 맥락 — 회차가 올라갈수록 내용이 달라지는 부분 ══
+  let sR="";
+  if(pastChScores.length===0){
+    sR=V("n1",
+      `이번 ${roundNo}회차는 앞으로의 학습 방향을 잡는 기준점이 되는 시험입니다. 지금의 점수 자체보다, 어떤 단원에서 어떤 형태로 실점했는지를 기록해 두고 다음 회차와 비교해 나가는 것이 중요합니다.`,
+      `${roundNo}회차는 현재 위치를 확인하는 첫 좌표에 해당합니다. 이후 회차가 쌓이면 단원별 강약과 성장 곡선이 함께 보이게 되므로, 이번 결과는 비교의 출발점으로 활용하겠습니다.`,
+      `이번 ${roundNo}회차 결과는 앞으로의 변화를 재는 기준선이 됩니다. 다음 회차부터는 이번 데이터와 견주어 어느 단원이 올라오고 어느 단원이 정체되는지 구체적으로 말씀드릴 수 있습니다.`);
+  }else{
+    const prev=pastChScores[pastChScores.length-1];
+    const delta=Math.round((score-prev.score)*10)/10;
+    const ad=Math.abs(delta);
+    if(delta>=8){
+      sR=V("n2",
+        `직전 ${prev.title}의 ${prev.score}점과 비교하면 ${ad}점 오른 결과입니다. 짧은 기간에 만들어진 상승이므로, 이번에 효과를 본 학습 방식이 무엇이었는지 아이와 함께 짚어두면 다음 회차에도 재현하기 쉽습니다.`,
+        `${prev.title} 대비 ${ad}점 상승했습니다. 점수가 오르는 구간에서는 자신감이 함께 붙기 때문에, 지금의 흐름을 끊지 않고 학습량을 유지하는 것이 무엇보다 중요합니다.`,
+        `이전 회차 ${prev.score}점에서 ${score}점으로 ${ad}점 올랐습니다. 우연한 등락이 아니라 준비의 결과로 보이는 만큼, 다음 회차에서 이 수준을 지켜내는 것을 목표로 잡겠습니다.`);
+    }else if(delta<=-8){
+      sR=V("n3",
+        `직전 ${prev.title}의 ${prev.score}점에서 ${ad}점 내려간 결과입니다. 다만 한 회차의 하락만으로 실력이 떨어졌다고 보기는 어렵고, 시험 범위나 컨디션의 영향일 수 있으므로 아래 오답 유형을 함께 확인해 보시길 권합니다.`,
+        `${prev.title} 대비 ${ad}점 하락했습니다. 어느 단원에서 점수가 빠졌는지가 중요한데, 아래 단원별 분석에서 그 지점을 구체적으로 짚어드리겠습니다.`,
+        `이전 ${prev.score}점에서 ${score}점으로 ${ad}점 조정되었습니다. 이런 회차는 오히려 약점이 선명하게 드러나는 기회이므로, 다음 회차 전에 해당 단원을 다시 훑는 계획을 잡겠습니다.`);
+    }else{
+      sR=V("n4",
+        `직전 ${prev.title}의 ${prev.score}점과 비슷한 수준을 유지했습니다. 점수가 안정적이라는 것은 기복이 적다는 뜻이기도 하지만, 한 단계 올라서려면 지금까지와는 다른 유형에 시간을 배분할 필요가 있다는 신호이기도 합니다.`,
+        `${prev.title}의 ${prev.score}점과 큰 차이 없는 결과입니다. 현재 구간에서 안정적으로 자리 잡았으므로, 이제는 늘 틀리던 유형 한두 가지를 정해 집중적으로 깨는 방식이 효과적입니다.`,
+        `이전 회차와 유사한 ${score}점입니다. 유지 자체는 나쁘지 않지만 점수를 끌어올리려면 취약 단원을 정면으로 다루는 시간이 확보되어야 합니다.`);
+    }
+    // 3회차 이상이면 누적 추세를 한 문장 덧붙임
+    if(pastChScores.length>=2){
+      const flow=[...pastChScores.map(x=>x.score),score];
+      const titles=[...pastChScores.map(x=>x.title),exam.title];
+      const trend=flow[flow.length-1]-flow[0];
+      const path=titles.map((t,i)=>`${t} ${flow[i]}점`).join(" → ");
+      if(trend>5)sR+=V("t1",` 최근 흐름은 ${path}으로, 전체적으로 우상향하고 있습니다.`,` 누적으로 보면 ${path}으로 꾸준히 올라오는 모습입니다.`);
+      else if(trend<-5)sR+=V("t2",` 최근 흐름은 ${path}으로, 하향세가 이어지고 있어 흐름을 되잡을 시점입니다.`,` 누적 추이는 ${path}으로 점차 내려오고 있어 점검이 필요합니다.`);
+      else sR+=V("t3",` 최근 흐름은 ${path}으로 비교적 일정한 수준을 유지하고 있습니다.`,` 누적으로는 ${path}으로 큰 기복 없이 이어지고 있습니다.`);
+    }
+  }
+  if(sR)p.push(sR);
+
+  // ══ 문단 3. 성취도 분석 ══
   let s2="";
   if(strongCh.length>0&&hardCorrect.length>0){
-    s2+=`단원별로 살펴보면, ${strongCh.map(c=>c.name).join("과 ")} 영역에서 ${strongCh.map(c=>c.score+"%").join(", ")}의 정답률을 보이며 해당 파트의 학습이 충실하게 이루어져 있습니다. 특히 ${hardCorrect.map(q=>q.question_no+"번").join(", ")} 같은 난이도 ${dl(hardCorrect[0].difficulty)} 문항까지 정확하게 처리한 점으로 보아, 단순 개념 이해를 넘어 응용 문제에 대한 접근력도 갖추어져 있는 것으로 판단됩니다.`;
+    s2=V("a1",
+      `단원별로 살펴보면, ${chList(strongCh)} 영역에서 ${strongCh.map(c=>c.score+"%").join(", ")}의 정답률을 보이며 해당 파트의 학습이 충실하게 이루어져 있습니다. 특히 ${nos(hardCorrect)}번 같은 난이도 ${dl(hardCorrect[0].difficulty)} 문항까지 정확하게 처리한 점으로 보아, 단순 개념 이해를 넘어 응용 문제에 대한 접근력도 갖추어져 있는 것으로 판단됩니다.`,
+      `강점부터 말씀드리면 ${chList(strongCh)} 단원이 각각 ${strongCh.map(c=>c.score+"%").join(", ")}로 안정적입니다. 여기에 ${nos(hardCorrect)}번 같은 난이도 ${dl(hardCorrect[0].difficulty)} 문항까지 해결했다는 점은, 개념을 외운 수준을 넘어 상황에 맞게 꺼내 쓸 수 있다는 의미입니다.`,
+      `${chList(strongCh)} 파트가 ${strongCh.map(c=>c.score+"%").join(", ")}로 잘 잡혀 있습니다. 무엇보다 ${nos(hardCorrect)}번 등 난이도 ${dl(hardCorrect[0].difficulty)} 문항을 놓치지 않은 것이 인상적인데, 이는 낯선 문제 앞에서도 풀이의 실마리를 찾아낼 수 있다는 뜻입니다.`);
   }else if(strongCh.length>0){
-    s2+=`단원별로 살펴보면, ${strongCh.map(c=>c.name).join("과 ")} 영역에서 ${strongCh.map(c=>c.score+"%").join(", ")}의 정답률을 기록하고 있어 해당 파트의 기본 학습은 충실하게 이루어진 것으로 보입니다.`;
+    s2=V("a2",
+      `단원별로 살펴보면, ${chList(strongCh)} 영역에서 ${strongCh.map(c=>c.score+"%").join(", ")}의 정답률을 기록하고 있어 해당 파트의 기본 학습은 충실하게 이루어진 것으로 보입니다.`,
+      `${chList(strongCh)} 단원은 ${strongCh.map(c=>c.score+"%").join(", ")}의 정답률로 안정적입니다. 이 영역은 이미 확보된 구간이므로, 남은 시간은 다른 단원에 배분하는 편이 효율적입니다.`,
+      `강점 영역은 ${chList(strongCh)}이며 정답률은 ${strongCh.map(c=>c.score+"%").join(", ")}입니다. 기본 개념이 자리 잡은 단원이라, 여기서는 실수 관리만 유지해도 충분합니다.`);
   }else if(hardCorrect.length>0){
-    s2+=`이번 시험에서 ${hardCorrect.map(q=>q.question_no+"번(난이도 "+dl(q.difficulty)+")").join(", ")} 문항을 정확히 풀어낸 점은 주목할 부분입니다. 해당 유형의 문제 해결 과정이 체화되어 있다는 의미이므로, 이 감각을 유지하면서 인접 단원으로 확장해 나가는 것이 중요합니다.`;
+    s2=V("a3",
+      `이번 시험에서 ${hardCorrect.map(q=>q.question_no+"번(난이도 "+dl(q.difficulty)+")").join(", ")} 문항을 정확히 풀어낸 점은 주목할 부분입니다. 해당 유형의 문제 해결 과정이 체화되어 있다는 의미이므로, 이 감각을 유지하면서 인접 단원으로 확장해 나가는 것이 중요합니다.`,
+      `단원별 정답률은 아직 고르지 않지만, ${nos(hardCorrect)}번 같은 고난도 문항을 맞힌 것은 분명한 신호입니다. 어려운 문제를 풀어낼 사고력은 있다는 뜻이므로, 기본 유형의 처리 속도만 안정되면 점수는 빠르게 따라옵니다.`,
+      `${nos(hardCorrect)}번 등 난이도가 높은 문항에서 정답을 기록했습니다. 이런 문항은 요령으로 맞히기 어려운 유형이라, 개념을 실제로 이해하고 있다는 근거로 볼 수 있습니다.`);
   }else if(correctQs.length>0){
-    s2+=`전체 ${qs.length}문항 중 ${correctQs.length}문항에서 정답을 기록하였으며, 기초적인 개념 이해는 확보되어 있는 상태입니다. 다만, 시험에서 안정적으로 득점하기 위해서는 정답률이 높은 단원의 완성도를 더 끌어올리는 작업이 병행되어야 합니다.`;
+    s2=V("a4",
+      `전체 ${qs.length}문항 중 ${correctQs.length}문항에서 정답을 기록하였으며, 기초적인 개념 이해는 확보되어 있는 상태입니다. 다만, 시험에서 안정적으로 득점하기 위해서는 정답률이 높은 단원의 완성도를 더 끌어올리는 작업이 병행되어야 합니다.`,
+      `${qs.length}문항 중 ${correctQs.length}문항을 맞혔습니다. 기본 개념은 잡혀 있으나 아직 단원별로 확실하게 자리 잡은 영역이 뚜렷하지 않아, 먼저 한 단원을 끝까지 완성해 성공 경험을 만드는 방식을 권합니다.`,
+      `총 ${qs.length}문항 가운데 ${correctQs.length}문항에서 정답이 나왔습니다. 개념의 큰 줄기는 이해하고 있는 단계이므로, 이제는 단원 하나를 정해 정답률을 확실히 끌어올리는 데 집중하는 것이 효과적입니다.`);
   }
   if(s2)p.push(s2);
 
-  // ── 3. 보완 분석 ──
+  // ══ 문단 4. 보완 분석 ══
   if(wrongQsList.length>0){
     let s3="";
     if(easyWrong.length>0&&hardWrong.length>0){
-      s3+=`한편, ${easyWrong.map(q=>q.question_no+"번").join(", ")} 문항의 경우 난이도가 ${dl(easyWrong[0].difficulty)} 수준임에도 오답이 나왔습니다. 이 유형은 개념 자체가 어려운 것이 아니라 풀이 과정에서 조건을 놓치거나 계산 실수가 개입되었을 가능성이 높으므로, 문제를 처음부터 다시 풀어보며 어디에서 분기가 갈렸는지 확인하는 작업이 필요합니다. 아울러 ${hardWrong.map(q=>q.question_no+"번").join(", ")} 같은 고난도 문항에서도 오답이 발생했는데, 이 문항들은 복합적인 개념 적용이 요구되는 유형인 만큼 정석적인 풀이 과정을 먼저 익힌 뒤 실전 풀이로 넘어가는 단계적 접근이 효과적입니다.`;
+      s3=V("b1",
+        `한편, ${nos(easyWrong)}번 문항의 경우 난이도가 ${dl(easyWrong[0].difficulty)} 수준임에도 오답이 나왔습니다. 이 유형은 개념 자체가 어려운 것이 아니라 풀이 과정에서 조건을 놓치거나 계산 실수가 개입되었을 가능성이 높으므로, 문제를 처음부터 다시 풀어보며 어디에서 분기가 갈렸는지 확인하는 작업이 필요합니다. 아울러 ${nos(hardWrong)}번 같은 고난도 문항에서도 오답이 발생했는데, 정석적인 풀이 과정을 먼저 익힌 뒤 실전 풀이로 넘어가는 단계적 접근이 효과적입니다.`,
+        `보완이 필요한 부분은 두 갈래입니다. 먼저 ${nos(easyWrong)}번은 난이도 ${dl(easyWrong[0].difficulty)} 수준이라 개념보다는 조건 누락이나 연산 실수일 가능성이 큽니다. 이런 실점은 오답노트보다 같은 문제를 다시 손으로 풀어보는 쪽이 효과가 빠릅니다. 다음으로 ${nos(hardWrong)}번은 여러 개념을 엮어야 하는 문항이라, 풀이 틀을 먼저 세운 뒤 유사 유형을 반복하는 순서가 맞습니다.`,
+        `오답을 성격별로 나누면, ${nos(easyWrong)}번은 충분히 맞힐 수 있었던 ${dl(easyWrong[0].difficulty)} 난이도 문항입니다. 이 부분은 실력보다 습관의 문제일 가능성이 크므로 풀이 과정을 소리 내어 되짚어보게 하는 방법을 권합니다. 반면 ${nos(hardWrong)}번은 변별력 문항이라, 지금 단계에서는 정답보다 접근 방향을 익히는 데 목적을 두는 편이 낫습니다.`);
     }else if(easyWrong.length>0){
-      s3+=`다만, ${easyWrong.map(q=>q.question_no+"번").join(", ")} 문항에서 오답이 발생한 점은 점검이 필요합니다. 해당 문항들은 난이도 ${dl(easyWrong[0].difficulty)} 수준으로, 개념 부족보다는 풀이 과정 중 조건 누락이나 연산 실수에서 비롯되었을 가능성이 높습니다. 이러한 유형의 실수는 시간 제한 환경에서 반복 훈련을 통해 체화시키는 것이 가장 효과적입니다.`;
+      s3=V("b2",
+        `다만, ${nos(easyWrong)}번 문항에서 오답이 발생한 점은 점검이 필요합니다. 해당 문항들은 난이도 ${dl(easyWrong[0].difficulty)} 수준으로, 개념 부족보다는 풀이 과정 중 조건 누락이나 연산 실수에서 비롯되었을 가능성이 높습니다. 이러한 유형의 실수는 시간 제한 환경에서 반복 훈련을 통해 체화시키는 것이 가장 효과적입니다.`,
+        `아쉬운 지점은 ${nos(easyWrong)}번입니다. 난이도 ${dl(easyWrong[0].difficulty)} 수준이라 몰라서 틀린 문항으로 보기 어렵고, 문제를 끝까지 읽지 않았거나 중간 계산에서 어긋났을 가능성이 큽니다. 이런 실점은 한 번에 사라지지 않으므로 매 회차 같은 방식으로 점검해 나가겠습니다.`,
+        `${nos(easyWrong)}번에서의 실점이 눈에 띕니다. 난이도 ${dl(easyWrong[0].difficulty)} 문항인 만큼 이 부분만 정리해도 점수 변화가 즉시 나타납니다. 아이에게는 왜 틀렸는지를 한 문장으로 설명하게 해보시면 원인이 분명해집니다.`);
     }else if(hardWrong.length>0){
-      s3+=`오답이 발생한 ${hardWrong.map(q=>q.question_no+"번").join(", ")} 문항은 난이도 ${dl(hardWrong[0].difficulty)} 이상의 고난도 유형입니다. 이 문항들은 대부분의 학생이 어려움을 겪는 변별력 문항에 해당하므로, 오답 자체보다는 풀이 접근 방식을 점검하고 유사 유형을 반복적으로 경험하는 것이 중요합니다.`;
+      s3=V("b3",
+        `오답이 발생한 ${nos(hardWrong)}번 문항은 난이도 ${dl(hardWrong[0].difficulty)} 이상의 고난도 유형입니다. 이 문항들은 대부분의 학생이 어려움을 겪는 변별력 문항에 해당하므로, 오답 자체보다는 풀이 접근 방식을 점검하고 유사 유형을 반복적으로 경험하는 것이 중요합니다.`,
+        `틀린 문항은 ${nos(hardWrong)}번으로, 모두 난이도 ${dl(hardWrong[0].difficulty)} 이상의 변별 문항입니다. 기본 유형은 이미 확보하고 있다는 뜻이므로 크게 걱정하실 부분은 아니며, 상위권 도약을 위해 이 구간을 계획적으로 다뤄 나가겠습니다.`,
+        `실점은 ${nos(hardWrong)}번에 몰려 있고 모두 고난도 문항입니다. 이 유형은 한 번에 정복되지 않으므로, 회차를 거듭하며 접근법을 쌓아가는 방식으로 지도하겠습니다.`);
     }else{
-      s3+=`오답이 발생한 ${wrongQsList.map(q=>q.question_no+"번").join(", ")} 문항에 대해서는, 풀이 과정을 처음부터 재구성하며 어디에서 판단이 갈렸는지 확인하는 작업이 필요합니다.`;
+      s3=V("b4",
+        `오답이 발생한 ${nos(wrongQsList)}번 문항에 대해서는, 풀이 과정을 처음부터 재구성하며 어디에서 판단이 갈렸는지 확인하는 작업이 필요합니다.`,
+        `${nos(wrongQsList)}번에서 실점이 있었습니다. 각 문항을 다시 풀어보며 어느 단계에서 막혔는지 확인하는 과정을 수업에서 함께 진행하겠습니다.`,
+        `틀린 문항은 ${nos(wrongQsList)}번입니다. 정답을 확인하는 데 그치지 않고 풀이 흐름을 다시 세워보는 작업을 병행하겠습니다.`);
     }
     if(weakCh.length>0){
-      s3+=` 단원 단위로 보면 ${weakCh.map(c=>c.name+"(정답률 "+c.score+"%)").join(", ")} 파트의 정답률이 상대적으로 낮게 나타나고 있어, 이 단원의 핵심 개념과 대표 출제 유형을 중심으로 한 집중 복습이 필요합니다.`;
+      s3+=V("w1",
+        ` 단원 단위로 보면 ${weakCh.map(c=>c.name+"(정답률 "+c.score+"%)").join(", ")} 파트의 정답률이 상대적으로 낮게 나타나고 있어, 이 단원의 핵심 개념과 대표 출제 유형을 중심으로 한 집중 복습이 필요합니다.`,
+        ` 단원별로는 ${weakCh.map(c=>c.name+"(정답률 "+c.score+"%)").join(", ")}가 약한 축에 속합니다. 범위를 넓히기보다 이 단원들의 대표 유형부터 확실히 정리하는 순서를 권합니다.`,
+        ` 취약 단원은 ${weakCh.map(c=>c.name+"("+c.score+"%)").join(", ")}로 확인됩니다. 다음 회차 전까지 이 단원을 우선순위에 두고 복습 분량을 배정하겠습니다.`);
     }
     if(s3)p.push(s3);
   }
 
-  // ── 4. 최근 시험 흐름 + 향후 계획 ──
+  // ══ 문단 5. 단원별 변화 + 향후 계획 ══
   let s4="";
-  const histEntries=Object.values(histData||{}).sort((a,b)=>new Date(a.exam.created_at)-new Date(b.exam.created_at));
-  if(histEntries.length>0){
-    const pastChScores=[];
-    histEntries.forEach(h=>{
-      const hRes=h.results.find(r=>r.student_id===studentId);
-      if(!hRes)return;
-      const hWq=hRes.wrong_questions||[];
-      const hChMap={};h.qs.forEach(q=>{const key=q.sub_chapter||q.chapter;if(!hChMap[key])hChMap[key]=[];hChMap[key].push(q)});
-      const scores={};Object.entries(hChMap).forEach(([name,qList])=>{
-        const correct=qList.filter(q=>!hWq.includes(q.question_no)).length;
-        scores[name]=Math.round((correct/qList.length)*100);
-      });
-      pastChScores.push({title:h.exam.title,score:hRes.total_score,chScores:scores});
+  if(pastChScores.length>0){
+    const currChMap={};chScores.forEach(c=>{currChMap[c.name]=c.score});
+    const lastPast=pastChScores[pastChScores.length-1];
+    const improved=[],declined=[];
+    Object.entries(currChMap).forEach(([name,curScore])=>{
+      const pastScore=lastPast.chScores[name];
+      if(pastScore!=null){
+        const diff=curScore-pastScore;
+        if(diff>=20)improved.push({name,from:pastScore,to:curScore});
+        else if(diff<=-20)declined.push({name,from:pastScore,to:curScore});
+      }
     });
-    if(pastChScores.length>0){
-      const currChMap={};chScores.forEach(c=>{currChMap[c.name]=c.score});
-      const lastPast=pastChScores[pastChScores.length-1];
-      const improved=[];const declined=[];
-      Object.entries(currChMap).forEach(([name,curScore])=>{
-        const pastScore=lastPast.chScores[name];
-        if(pastScore!=null){
-          const diff=curScore-pastScore;
-          if(diff>=20)improved.push({name,from:pastScore,to:curScore});
-          else if(diff<=-20)declined.push({name,from:pastScore,to:curScore});
-        }
-      });
-      const scoreFlow=[...pastChScores.map(p=>p.score),score];
-      const titles=[...pastChScores.map(p=>p.title),exam.title];
-      s4+=`최근 ${scoreFlow.length}회 시험 흐름을 살펴보면, ${titles.map((t,i)=>t+" "+scoreFlow[i]+"점").join(" → ")}으로 `;
-      const trend=scoreFlow[scoreFlow.length-1]-scoreFlow[0];
-      if(trend>5)s4+=`전반적으로 상승세를 보이고 있습니다. `;
-      else if(trend<-5)s4+=`다소 하락세가 나타나고 있어 흐름을 되잡을 필요가 있습니다. `;
-      else s4+=`비교적 일정한 수준을 유지하고 있습니다. `;
-      if(improved.length>0){
-        s4+=`특히 ${improved.map(c=>c.name+"("+c.from+"% → "+c.to+"%)").join(", ")} 영역에서 눈에 띄는 향상이 있었으며, 해당 단원의 학습이 실전에서 성과로 이어지고 있는 점은 긍정적입니다. `;
-      }
-      if(declined.length>0){
-        s4+=`반면 ${declined.map(c=>c.name+"("+c.from+"% → "+c.to+"%)").join(", ")} 영역은 이전 대비 정답률이 하락하였으므로, 해당 단원의 복습을 다시 한번 진행할 필요가 있습니다. `;
-      }
+    if(improved.length>0){
+      s4+=V("i1",
+        `단원별로는 ${improved.map(c=>c.name+"("+c.from+"% → "+c.to+"%)").join(", ")} 영역에서 눈에 띄는 향상이 있었으며, 해당 단원의 학습이 실전에서 성과로 이어지고 있는 점은 긍정적입니다. `,
+        `직전 회차와 견주면 ${improved.map(c=>c.name+"("+c.from+"% → "+c.to+"%)").join(", ")}가 확실히 올라왔습니다. 노력한 부분이 결과로 나타난 만큼 아이에게도 짚어 말씀해 주시면 좋겠습니다. `);
+    }
+    if(declined.length>0){
+      s4+=V("i2",
+        `반면 ${declined.map(c=>c.name+"("+c.from+"% → "+c.to+"%)").join(", ")} 영역은 이전 대비 정답률이 하락하였으므로, 해당 단원의 복습을 다시 한번 진행할 필요가 있습니다. `,
+        `한편 ${declined.map(c=>c.name+"("+c.from+"% → "+c.to+"%)").join(", ")}는 이전보다 정답률이 내려갔습니다. 한동안 다루지 않아 감이 떨어졌을 가능성이 있어 재점검하겠습니다. `);
     }
   }
   if(wrongQsList.length>0){
-    const wqNos=wrongQsList.map(q=>q.question_no).sort((a,b)=>a-b).join(", ");
-    s4+=`다음 수업에서는 이번 시험의 오답 문항(${wqNos}번)에 대한 풀이 점검을 우선적으로 진행할 예정입니다.`;
+    s4+=V("p1",
+      `다음 수업에서는 이번 시험의 오답 문항(${nos(wrongQsList)}번)에 대한 풀이 점검을 우선적으로 진행할 예정입니다.`,
+      `다음 수업은 이번 회차 오답(${nos(wrongQsList)}번) 정리부터 시작하겠습니다.`,
+      `다가오는 수업에서 ${nos(wrongQsList)}번 문항을 함께 다시 풀어보며 막힌 지점을 짚을 계획입니다.`);
     if(weakCh.length>0){
-      s4+=` ${weakCh.map(c=>c.name).join(", ")} 단원은 유사 유형의 문항을 추가로 배정하여, 같은 유형에서 반복적으로 실수가 발생하지 않도록 훈련할 계획입니다.`;
+      s4+=V("p2",
+        ` ${chList(weakCh)} 단원은 유사 유형의 문항을 추가로 배정하여, 같은 유형에서 반복적으로 실수가 발생하지 않도록 훈련할 계획입니다.`,
+        ` ${chList(weakCh)} 단원은 같은 유형을 여러 번 접할 수 있도록 과제를 따로 배정하겠습니다.`);
     }
     if(easyWrong.length>0&&hardCorrect.length>0){
-      s4+=` ${fn} 학생의 경우 고난도 문항에 대한 접근력은 확보되어 있으므로, 기본 유형에서의 안정성을 높이는 데 집중하면 전체 점수가 빠르게 올라갈 수 있는 구조입니다.`;
+      s4+=V("p3",
+        ` ${fn} 학생의 경우 고난도 문항에 대한 접근력은 확보되어 있으므로, 기본 유형에서의 안정성을 높이는 데 집중하면 전체 점수가 빠르게 올라갈 수 있는 구조입니다.`,
+        ` ${fn} 학생은 어려운 문항을 풀어낼 힘은 이미 있으므로, 쉬운 문항을 흘리지 않는 것만으로도 점수가 크게 달라질 수 있는 상태입니다.`);
     }else if(score<avg){
-      s4+=` 현재 시점에서는 기본 유형의 정답률을 먼저 끌어올리는 것이 전체 점수 향상에 가장 효율적인 방향이므로, 이에 맞추어 수업을 구성하겠습니다.`;
+      s4+=V("p4",
+        ` 현재 시점에서는 기본 유형의 정답률을 먼저 끌어올리는 것이 전체 점수 향상에 가장 효율적인 방향이므로, 이에 맞추어 수업을 구성하겠습니다.`,
+        ` 지금은 어려운 문항보다 기본 유형의 정답률을 먼저 올리는 쪽이 점수 상승에 훨씬 효율적이라, 그 방향으로 수업을 잡겠습니다.`);
     }
   }else{
-    s4+=`이번 시험에서는 전 문항 정답을 기록하였습니다. 다음 수업에서는 현재의 완성도를 유지하면서, 실전 킬러 문항 대비를 위한 심화 유형 풀이를 단계적으로 확대해 나갈 계획입니다.`;
+    s4+=V("p5",
+      `이번 시험에서는 전 문항 정답을 기록하였습니다. 다음 수업에서는 현재의 완성도를 유지하면서, 실전 킬러 문항 대비를 위한 심화 유형 풀이를 단계적으로 확대해 나갈 계획입니다.`,
+      `이번 회차는 전 문항 정답입니다. 더 보완할 지점이 없는 만큼, 다음 수업부터는 한 단계 위의 심화 유형으로 범위를 넓혀가겠습니다.`,
+      `모든 문항에서 정답을 기록했습니다. 현재 수준을 유지하면서 최상위권 변별 문항에 대비한 훈련을 단계적으로 시작하겠습니다.`);
   }
   if(s4)p.push(s4);
 
