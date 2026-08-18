@@ -236,6 +236,9 @@ function CatBadge({cat}){const c=catOf(cat);return<span style={{fontSize:10,font
 const QS=new URLSearchParams(location.search);
 const QS_STUDENT=QS.get("student_id");
 const QS_EXAM=QS.get("exam_id");
+// 조회 전용 진입 — 동료 선생님께 드리는 주소. 문항등록·OMR 탭과 수정 버튼이 사라집니다.
+//   예) report.html?viewer=1
+const QS_VIEWER=(QS.get("viewer")||"")==="1";
 const diffMap={"하":{bg:"#E8F5E9",text:"#2E7D32"},"중하":{bg:"#E3F2FD",text:"#1565C0"},"중":{bg:"#FFF8E1",text:"#F57F17"},"중상":{bg:"#FFF3E0",text:"#E65100"},"상":{bg:"#FCE4EC",text:"#C62828"},"최상":{bg:"#F3E5F5",text:"#6A1B9A"}};
 const typeMap={"선택형":{bg:"#E3F2FD",text:"#1565C0"},"단답형":{bg:"#FFF3E0",text:"#E65100"},"서술형":{bg:"#FCE4EC",text:"#C62828"}};
 function Badge({value,map}){const c=map[value]||{bg:"#F5F5F5",text:"#666"};return<span style={{fontSize:11,padding:"2px 8px",borderRadius:12,background:c.bg,color:c.text,fontWeight:600}}>{value}</span>}
@@ -1878,8 +1881,9 @@ function genComment(score,avg,chScores,wq,qs,exam,stName,avgDiff,allRes,histData
 // initialExamId : 이 시험지로 바로 진입 (시험 선택 화면 건너뜀)
 // lockStudentId : 이 학생 한 명만 표시 (학생·학부모 딥링크)
 // onBack        : 잠금 모드에서 "← 목록" 눌렀을 때 호출
-function ReportTab({initialExamId,lockStudentId,onBack}={}){
+function ReportTab({initialExamId,lockStudentId,onBack,readOnly}={}){
   const locked=!!lockStudentId;
+  const ro=!!readOnly||QS_VIEWER;   // 조회 전용 — 수정 버튼을 숨김
   const[step,setStep]=useState(initialExamId?"loading":"select");
   const[exams,setExams]=useState([]);
   const[exam,setExam]=useState(null);
@@ -1930,7 +1934,7 @@ function ReportTab({initialExamId,lockStudentId,onBack}={}){
         }
       }catch(e){console.log("트렌드 데이터 로드 실패:",e)}
       setHistData(historyData);
-      setSi(0);setStep("report");
+      setSi(0);setStep(locked?"report":"summary");
     }catch(e){setErr(e.message)}
   };
 
@@ -1955,6 +1959,146 @@ function ReportTab({initialExamId,lockStudentId,onBack}={}){
   );
 
   const allSwr=students.filter(s=>results[s.id]);
+
+  /* ══════════════════════════════════════════════════════════════
+     반 전체 요약표  (step === "summary")
+     시험 하나를 고르면 반 전원의 성적을 한 화면에 보여줍니다.
+     이름을 누르면 그 학생 개인 분석지로 들어갑니다.
+     ══════════════════════════════════════════════════════════════ */
+  if(step==="summary"&&!locked){
+    const chKeys=[...new Set(qs.map(q=>q.sub_chapter||q.chapter))];
+    const isCorrect=(sid,q)=>{
+      const w=(results[sid]||{}).wrong_questions||[];
+      if(q.question_type==="서술형"){
+        const v=subScores[`${sid}-${q.question_no}`];
+        return v==null?null:Number(v)>=Number(q.score);
+      }
+      return !w.includes(q.question_no);
+    };
+    const rows=allSwr.map(st2=>{
+      const w=(results[st2.id]||{}).wrong_questions||[];
+      const b=computeScore(qs,w,essayFromMap(subScores,st2.id));
+      let ok=0,graded=0;
+      qs.forEach(q=>{const c=isCorrect(st2.id,q);if(c!=null){graded++;if(c)ok++}});
+      const chRate=chKeys.map(k=>{
+        const list=qs.filter(q=>(q.sub_chapter||q.chapter)===k);
+        let o=0,g=0;list.forEach(q=>{const c=isCorrect(st2.id,q);if(c!=null){g++;if(c)o++}});
+        return{name:k,rate:g?Math.round(o/g*100):null};
+      });
+      const weak=chRate.filter(x=>x.rate!=null&&x.rate<70).sort((a,b2)=>a.rate-b2.rate).slice(0,2);
+      const res2=results[st2.id]||{};
+      return{st:st2,score:b.total,ok,graded,chRate,weak,
+             done:!!(res2.omr_graded&&res2.sub_graded),stored:res2.total_score!=null?r1(res2.total_score):null,
+             calc:b.total};
+    }).sort((a,b2)=>b2.score-a.score);
+    // 동점은 같은 등수
+    let rank=0,prev=null;
+    rows.forEach((x,i)=>{ if(prev===null||x.score!==prev){rank=i+1;prev=x.score} x.rank=rank; });
+
+    const scores=rows.map(x=>x.score);
+    const clsAvg=scores.length?r1(scores.reduce((a,b2)=>a+b2,0)/scores.length):0;
+    const maxScore=scores.length?Math.max(...scores):0, minScore=scores.length?Math.min(...scores):0;
+    const totalMax=r1(qs.reduce((a,q)=>a+Number(q.score||0),0));
+    const driftN=rows.filter(x=>x.stored!=null&&Math.abs(x.stored-x.calc)>0.05).length;
+    // 단원별 반 평균 정답률
+    const chAvg=chKeys.map(k=>{
+      const list=qs.filter(q=>(q.sub_chapter||q.chapter)===k);
+      let o=0,g=0;
+      allSwr.forEach(st2=>list.forEach(q=>{const c=isCorrect(st2.id,q);if(c!=null){g++;if(c)o++}}));
+      return{name:k,rate:g?Math.round(o/g*100):0};
+    }).sort((a,b2)=>a.rate-b2.rate);
+
+    const tile=(l,v,sub)=>(
+      <div key={l} style={{background:"white",borderRadius:12,padding:"clamp(12px,3vw,16px) clamp(8px,2vw,14px)",textAlign:"center",border:`1px solid ${RC.border}`,minWidth:0}}>
+        <div style={{fontSize:"clamp(9.5px,2.4vw,11px)",color:RC.accent,fontWeight:700,marginBottom:5}}>{l}</div>
+        <div style={{fontSize:"clamp(15px,4vw,22px)",fontWeight:800,color:RC.text,lineHeight:1.2}}>{v}</div>
+        {sub&&<div style={{fontSize:"clamp(8.5px,2.1vw,10px)",color:RC.sub,marginTop:3}}>{sub}</div>}
+      </div>
+    );
+
+    return(
+      <div style={{maxWidth:1000,margin:"0 auto",padding:"clamp(14px,3.5vw,22px) clamp(12px,3vw,20px) 60px"}}>
+        <div className="no-print" style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",marginBottom:14}}>
+          <button onClick={()=>setStep("select")} style={{padding:"8px 14px",fontSize:12,background:"white",color:RC.sub,border:`1px solid ${RC.border}`,borderRadius:8,cursor:"pointer",whiteSpace:"nowrap"}}>← 시험 선택</button>
+          <div style={{flex:1,display:"flex",alignItems:"center",gap:7,minWidth:0}}>
+            <CatBadge cat={exam.category}/>
+            <span style={{fontSize:"clamp(13px,3.3vw,16px)",fontWeight:800,color:RC.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{exam.title}</span>
+          </div>
+          {!ro&&<button onClick={()=>window.print()} style={{padding:"8px 14px",fontSize:12,fontWeight:600,background:RC.primary,color:"white",border:"none",borderRadius:8,cursor:"pointer",whiteSpace:"nowrap"}}>🖨 인쇄</button>}
+        </div>
+
+        <div style={{fontSize:11,color:RC.accent,fontWeight:700,letterSpacing:1}}>CLASS OVERVIEW</div>
+        <h2 style={{fontSize:"clamp(18px,4.6vw,24px)",fontWeight:800,color:RC.text,marginTop:3,marginBottom:4}}>반 전체 성적</h2>
+        <div style={{fontSize:"clamp(10px,2.5vw,11.5px)",color:RC.sub,marginBottom:14}}>{exam.class_name} · 이름을 누르면 그 학생의 개인 분석지로 들어갑니다.</div>
+
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(96px,1fr))",gap:"clamp(7px,2vw,12px)",marginBottom:16}}>
+          {tile("응시",`${allSwr.length}명`)}
+          {tile("반 평균",`${clsAvg}점`,`만점 ${totalMax}점`)}
+          {tile("최고점",`${maxScore}점`)}
+          {tile("최저점",`${minScore}점`)}
+        </div>
+
+        {driftN>0&&!ro&&(
+          <div style={{background:"#FEF2F2",border:"1.5px solid #FECACA",borderRadius:10,padding:"10px 14px",marginBottom:14,fontSize:12,color:"#B91C1C",fontWeight:700}}>
+            ⚠️ 저장된 점수와 다시 계산한 점수가 다른 학생이 {driftN}명 있습니다 — OMR등록 → 채점 현황에서 일괄로 바로잡을 수 있습니다.
+          </div>
+        )}
+
+        {/* 학생별 표 */}
+        <div style={{background:"white",borderRadius:12,border:`1px solid ${RC.border}`,overflow:"hidden",marginBottom:18}}>
+          <div style={{overflowX:"auto"}}>
+            <table style={{width:"100%",borderCollapse:"collapse",fontSize:"clamp(11px,2.7vw,13px)",minWidth:520}}>
+              <thead><tr style={{background:"#F7F4F1"}}>
+                {["등수","학생","점수","반평균 대비","맞은 문항","취약 단원"].map(h=>
+                  <th key={h} style={{padding:"9px 10px",textAlign:"left",fontSize:"clamp(9.5px,2.3vw,10.5px)",color:RC.sub,fontWeight:700,whiteSpace:"nowrap",borderBottom:`1.5px solid ${RC.border}`}}>{h}</th>)}
+              </tr></thead>
+              <tbody>{rows.map((x,i)=>{
+                const d=r1(x.score-clsAvg);
+                return(
+                  <tr key={x.st.id} onClick={()=>{setSi(allSwr.findIndex(z=>z.id===x.st.id));setStep("report")}}
+                    style={{background:i%2?"#FCFBFA":"white",borderTop:`1px solid ${RC.border}`,cursor:"pointer"}}>
+                    <td style={{padding:"9px 10px",fontWeight:800,color:x.rank<=3?RC.accent:RC.sub,whiteSpace:"nowrap"}}>{x.rank}</td>
+                    <td style={{padding:"9px 10px",fontWeight:700,color:RC.text,whiteSpace:"nowrap"}}>
+                      {x.st.name}
+                      {!x.done&&<span style={{marginLeft:5,fontSize:9,padding:"1px 5px",borderRadius:5,background:"#FFFBEB",color:"#B45309",fontWeight:800}}>채점중</span>}
+                    </td>
+                    <td style={{padding:"9px 10px",fontWeight:800,color:RC.text,whiteSpace:"nowrap"}}>{x.score}</td>
+                    <td style={{padding:"9px 10px",fontWeight:700,whiteSpace:"nowrap",color:d>0?"#15803D":(d<0?"#B91C1C":RC.sub)}}>{d>0?`+${d}`:d}</td>
+                    <td style={{padding:"9px 10px",color:RC.sub,whiteSpace:"nowrap"}}>{x.ok}/{x.graded}</td>
+                    <td style={{padding:"9px 10px",color:RC.sub}}>
+                      {x.weak.length?x.weak.map(w=>`${w.name}(${w.rate}%)`).join(", "):<span style={{color:"#15803D",fontWeight:700}}>없음</span>}
+                    </td>
+                  </tr>
+                );
+              })}</tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* 단원별 반 평균 정답률 */}
+        <div style={{background:"white",borderRadius:12,border:`1px solid ${RC.border}`,padding:"clamp(14px,3.5vw,20px)"}}>
+          <div style={{fontSize:11,color:RC.accent,fontWeight:700,letterSpacing:1}}>WEAK POINTS</div>
+          <div style={{fontSize:"clamp(14px,3.6vw,17px)",fontWeight:800,color:RC.text,marginTop:3,marginBottom:4}}>단원별 반 정답률</div>
+          <div style={{fontSize:"clamp(9.5px,2.4vw,11px)",color:RC.sub,marginBottom:14}}>낮은 단원부터 정렬했습니다. 다음 수업에서 먼저 다룰 순서로 보시면 됩니다.</div>
+          {chAvg.map(c=>{
+            const col=c.rate>=80?"#15803D":c.rate>=60?"#0369A1":c.rate>=40?"#B45309":"#B91C1C";
+            return(
+              <div key={c.name} style={{marginBottom:10}}>
+                <div style={{display:"flex",justifyContent:"space-between",fontSize:"clamp(10.5px,2.7vw,12px)",fontWeight:700,color:RC.text,marginBottom:4}}>
+                  <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",paddingRight:8}}>{c.name}</span>
+                  <span style={{color:col,whiteSpace:"nowrap"}}>{c.rate}%</span>
+                </div>
+                <div style={{height:7,background:"#EFEAE4",borderRadius:4,overflow:"hidden"}}>
+                  <div style={{width:`${c.rate}%`,height:"100%",background:col,borderRadius:4}}/>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
   const swr=locked?allSwr.filter(s=>String(s.id)===String(lockStudentId)):allSwr;
   if(!swr.length)return(
     <div style={{padding:40,textAlign:"center",color:RC.sub}}>
@@ -2056,18 +2200,18 @@ function ReportTab({initialExamId,lockStudentId,onBack}={}){
           </>
         ):(
           <>
-            <button onClick={()=>setStep("select")} style={{padding:"8px 14px",fontSize:12,background:"white",color:RC.sub,border:`1px solid ${RC.border}`,borderRadius:8,cursor:"pointer"}}>← 시험 선택</button>
+            <button onClick={()=>setStep("summary")} style={{padding:"8px 14px",fontSize:12,background:"white",color:RC.sub,border:`1px solid ${RC.border}`,borderRadius:8,cursor:"pointer",whiteSpace:"nowrap"}}>← 반 전체</button>
             <select value={si} onChange={e=>setSi(Number(e.target.value))} style={{flex:1,padding:"8px 12px",fontSize:14,fontWeight:600,border:`1.5px solid ${RC.accent}`,borderRadius:8,color:RC.text}}>
               {swr.map((s,i)=><option key={s.id} value={i}>{s.name}</option>)}
             </select>
           </>
         )}
-        {/* 인쇄 버튼은 교사 화면에서만 — 학생·학부모 딥링크(locked)에는 필요 없음 */}
-        {!locked&&<button onClick={()=>window.print()} style={{padding:"8px 16px",fontSize:12,fontWeight:600,background:RC.primary,color:"white",border:"none",borderRadius:8,cursor:"pointer",whiteSpace:"nowrap"}}>🖨 인쇄</button>}
+        {/* 인쇄 버튼은 교사 화면에서만 — 학생·학부모 딥링크(locked)·조회 전용에는 표시 안 함 */}
+        {!locked&&!ro&&<button onClick={()=>window.print()} style={{padding:"8px 16px",fontSize:12,fontWeight:600,background:RC.primary,color:"white",border:"none",borderRadius:8,cursor:"pointer",whiteSpace:"nowrap"}}>🖨 인쇄</button>}
       </div>
 
       {/* ── 정합성 경고 · 교사 화면 전용 (locked = 학생·학부모 딥링크에는 절대 안 뜸) ── */}
-      {!locked&&(drift||breakdown.unknown.length>0||!breakdown.essayDone)&&(
+      {!locked&&!ro&&(drift||breakdown.unknown.length>0||!breakdown.essayDone)&&(
         <div className="no-print" style={{margin:"12px 20px 0",background:"#FEF2F2",border:"1.5px solid #FECACA",borderRadius:10,padding:"12px 16px"}}>
           <div style={{fontSize:13,fontWeight:800,color:"#B91C1C",marginBottom:6}}>⚠️ 이 학생 점수에 확인할 점이 있습니다 (학부모 화면에는 표시되지 않습니다)</div>
           <div style={{fontSize:12,color:"#7F1D1D",lineHeight:1.8}}>
@@ -2308,9 +2452,11 @@ function StudentPortal({studentId}){
 // ══════════════════════════════
 function App(){
   // ⚠️ Hook은 반드시 조건문보다 위에서 호출 (렌더 간 순서 고정)
-  const[tab,setTab]=useState("register");
+  const[tab,setTab]=useState(QS_VIEWER?"report":"register");
   const[apiKey,setApiKey]=useState(SAVED_KEY);
-  const tabs=[{id:"register",label:"문항등록",icon:"📄"},{id:"omr",label:"OMR등록",icon:"📋"},{id:"report",label:"분석",icon:"📊"}];
+  const ALL_TABS=[{id:"register",label:"문항등록",icon:"📄"},{id:"omr",label:"OMR등록",icon:"📋"},{id:"report",label:"분석",icon:"📊"}];
+  // 조회 전용(?viewer=1)은 분석 탭만 — 문항등록·OMR은 진입 자체가 막힙니다.
+  const tabs=QS_VIEWER?ALL_TABS.filter(t=>t.id==="report"):ALL_TABS;
 
   // 학생·학부모 딥링크로 들어온 경우 → 교사용 탭(문항등록·OMR·API키)을 숨기고 전용 포털만 노출
   if(QS_STUDENT)return<StudentPortal studentId={QS_STUDENT}/>;
@@ -2327,10 +2473,13 @@ function App(){
         ))}
       </div>
 
-      {(tab==="register"||tab==="omr")&&<div className="no-print" style={{padding:"0 16px"}}><div style={{maxWidth:600,margin:"8px auto 0"}}><ApiKeyInput apiKey={apiKey} setApiKey={setApiKey}/></div></div>}
+      {!QS_VIEWER&&(tab==="register"||tab==="omr")&&<div className="no-print" style={{padding:"0 16px"}}><div style={{maxWidth:600,margin:"8px auto 0"}}><ApiKeyInput apiKey={apiKey} setApiKey={setApiKey}/></div></div>}
 
-      {tab==="register"&&<RegisterTab apiKey={apiKey}/>}
-      {tab==="omr"&&<OmrTab apiKey={apiKey}/>}
+      {QS_VIEWER&&<div className="no-print" style={{margin:"10px 16px 0",background:"#EFF6FF",border:"1.5px solid #BFDBFE",color:"#1E40AF",borderRadius:10,padding:"10px 14px",fontSize:12,fontWeight:700,lineHeight:1.6}}>
+        👁 조회 전용으로 접속했습니다 — 성적과 분석지를 보실 수 있고, 문항 등록·채점·수정은 되지 않습니다.
+      </div>}
+      {!QS_VIEWER&&tab==="register"&&<RegisterTab apiKey={apiKey}/>}
+      {!QS_VIEWER&&tab==="omr"&&<OmrTab apiKey={apiKey}/>}
       {tab==="report"&&<ReportTab/>}
     </div>
   );
