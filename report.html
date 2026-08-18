@@ -78,6 +78,21 @@ body{font-family:'Pretendard',-apple-system,'Malgun Gothic',sans-serif;backgroun
 .tab-btn{flex:1;padding:14px 8px;font-size:13px;font-weight:700;border:none;cursor:pointer;background:transparent;color:#999;border-bottom:3px solid transparent;transition:0.2s}
 .tab-btn.active{color:#2B4A6F;border-bottom-color:#2B4A6F}
 .card{background:white;border-radius:14px;padding:16px 20px;margin-bottom:12px;box-shadow:0 1px 4px rgba(0,0,0,0.04)}
+/* ── 요약 타일 줄맞춤 ──
+   예전에는 폭에 맞춰 알아서 접히게 뒀더니(auto-fit) 폰에서 4개짜리가
+   3개 + 1개로 끊겨 어중간해 보였습니다. 이제 개수를 알려주고,
+   좁아지면 4개 → 2×2 로 딱 떨어지게 접습니다. (3개짜리는 3열 유지) */
+.stat-grid{display:grid;gap:clamp(7px,2vw,12px)}
+.stat-grid[data-n="4"]{grid-template-columns:repeat(4,minmax(0,1fr))}
+.stat-grid[data-n="3"]{grid-template-columns:repeat(3,minmax(0,1fr))}
+.stat-grid[data-n="2"]{grid-template-columns:repeat(2,minmax(0,1fr))}
+@media(max-width:760px){
+  .stat-grid[data-n="4"]{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+/* 좁은 화면에서만 뜨는 '옆으로 밀어보세요' 안내 (표가 가로로 잘릴 때) */
+.scroll-hint{display:none}
+@media(max-width:640px){.scroll-hint{display:block}}
+@media print{.scroll-hint{display:none!important}}
 .btn-primary{padding:12px 28px;font-size:14px;font-weight:700;background:#2B4A6F;color:white;border:none;border-radius:10px;cursor:pointer}
 .btn-primary:disabled{background:#94A3B8;cursor:default}
 .err-box{font-size:13px;color:#DC2626;background:#FEF2F2;padding:10px 14px;border-radius:10px;margin-bottom:12px}
@@ -236,9 +251,33 @@ function CatBadge({cat}){const c=catOf(cat);return<span style={{fontSize:10,font
 const QS=new URLSearchParams(location.search);
 const QS_STUDENT=QS.get("student_id");
 const QS_EXAM=QS.get("exam_id");
-// 조회 전용 진입 — 동료 선생님께 드리는 주소. 문항등록·OMR 탭과 수정 버튼이 사라집니다.
-//   예) report.html?viewer=1
-const QS_VIEWER=(QS.get("viewer")||"")==="1";
+/* ── 조회 전용 모드 ────────────────────────────────────────────────
+   동료 선생님께 드리는 주소입니다. 문항등록·OMR 탭과 모든 수정 버튼이 사라집니다.
+       report.html?viewer=1
+
+   ⚠️ 한 번 이 주소로 들어온 기기는 그 사실을 브라우저에 기억해 둡니다.
+      그래서 나중에 주소에서 ?viewer=1 을 지우거나 다른 경로로 들어와도,
+      그 기기에서는 계속 조회 전용으로만 열립니다.
+      (주소만 고쳐서 교사 화면으로 넘어가는 것을 막기 위해서입니다)
+
+   원장님 기기에 잘못 걸렸을 때 푸는 방법 — 주소 뒤에 이렇게 한 번만:
+       report.html?viewer=0
+   ────────────────────────────────────────────────────────────────── */
+const VIEWER_LOCK_KEY="snt_viewer_lock_v1";
+const QS_VIEWER=(function(){
+  const p=QS.get("viewer");
+  let stored=false;
+  try{stored=localStorage.getItem(VIEWER_LOCK_KEY)==="1"}catch(e){}   // 시크릿 모드 등에서 막히면 무시
+  if(p==="0"){                        // 해제 (원장 전용 탈출구)
+    try{localStorage.removeItem(VIEWER_LOCK_KEY)}catch(e){}
+    return false;
+  }
+  if(p==="1"){                        // 이 기기를 조회 전용으로 고정
+    try{localStorage.setItem(VIEWER_LOCK_KEY,"1")}catch(e){}
+    return true;
+  }
+  return stored;                      // 파라미터가 없으면 기억해 둔 값을 따른다
+})();
 const diffMap={"하":{bg:"#E8F5E9",text:"#2E7D32"},"중하":{bg:"#E3F2FD",text:"#1565C0"},"중":{bg:"#FFF8E1",text:"#F57F17"},"중상":{bg:"#FFF3E0",text:"#E65100"},"상":{bg:"#FCE4EC",text:"#C62828"},"최상":{bg:"#F3E5F5",text:"#6A1B9A"}};
 const typeMap={"선택형":{bg:"#E3F2FD",text:"#1565C0"},"단답형":{bg:"#FFF3E0",text:"#E65100"},"서술형":{bg:"#FCE4EC",text:"#C62828"}};
 function Badge({value,map}){const c=map[value]||{bg:"#F5F5F5",text:"#666"};return<span style={{fontSize:11,padding:"2px 8px",borderRadius:12,background:c.bg,color:c.text,fontWeight:600}}>{value}</span>}
@@ -2031,7 +2070,7 @@ function ReportTab({initialExamId,lockStudentId,onBack,readOnly}={}){
         <h2 style={{fontSize:"clamp(18px,4.6vw,24px)",fontWeight:800,color:RC.text,marginTop:3,marginBottom:4}}>반 전체 성적</h2>
         <div style={{fontSize:"clamp(10px,2.5vw,11.5px)",color:RC.sub,marginBottom:14}}>{exam.class_name} · 이름을 누르면 그 학생의 개인 분석지로 들어갑니다.</div>
 
-        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(96px,1fr))",gap:"clamp(7px,2vw,12px)",marginBottom:16}}>
+        <div className="stat-grid" data-n="4" style={{marginBottom:16}}>
           {tile("응시",`${allSwr.length}명`)}
           {tile("반 평균",`${clsAvg}점`,`만점 ${totalMax}점`)}
           {tile("최고점",`${maxScore}점`)}
@@ -2045,6 +2084,7 @@ function ReportTab({initialExamId,lockStudentId,onBack,readOnly}={}){
         )}
 
         {/* 학생별 표 */}
+        <div className="scroll-hint no-print" style={{fontSize:10.5,color:RC.sub,marginBottom:5,textAlign:"right",fontWeight:600}}>표를 옆으로 밀면 ‘취약 단원’까지 보입니다 →</div>
         <div style={{background:"white",borderRadius:12,border:`1px solid ${RC.border}`,overflow:"hidden",marginBottom:18}}>
           <div style={{overflowX:"auto"}}>
             <table style={{width:"100%",borderCollapse:"collapse",fontSize:"clamp(11px,2.7vw,13px)",minWidth:520}}>
@@ -2254,7 +2294,7 @@ function ReportTab({initialExamId,lockStudentId,onBack,readOnly}={}){
           <div style={{textAlign:"right",minWidth:0}}><div style={{fontSize:"clamp(11px,2.9vw,14px)",fontWeight:700,opacity:0.9,marginBottom:6,whiteSpace:"nowrap"}}>총 문항수 {qs.length}문항</div><div style={{fontSize:"clamp(9.5px,2.4vw,12px)",fontWeight:500,opacity:0.75,lineHeight:1.5}}>{exam.structure||""}</div></div>
         </div>
 
-        <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:"clamp(7px,2vw,14px)",marginBottom:24}}>
+        <div className="stat-grid" data-n="3" style={{marginBottom:24}}>
           {[{l:"반 평균",v:`${avg}점`,s:"전체 응시생 기준"},{l:"변별력 문항",v:hardestQs.map(q=>q.question_no+"번").join(", ")},{l:"전체 난도",v:diffRevMap[avgDiff]||"중"}].map(x=>(
             <div key={x.l} style={{background:"white",borderRadius:12,padding:"clamp(12px,3vw,18px) clamp(5px,1.6vw,12px)",textAlign:"center",border:`1px solid ${RC.border}`,minWidth:0}}>
               <div style={{fontSize:"clamp(10px,2.5vw,12px)",color:RC.accent,fontWeight:700,marginBottom:8}}>{x.l}</div>
