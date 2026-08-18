@@ -2062,7 +2062,8 @@ function ReportTab({initialExamId,lockStudentId,onBack}={}){
             </select>
           </>
         )}
-        <button onClick={()=>window.print()} style={{padding:"8px 16px",fontSize:12,fontWeight:600,background:RC.primary,color:"white",border:"none",borderRadius:8,cursor:"pointer",whiteSpace:"nowrap"}}>🖨 인쇄</button>
+        {/* 인쇄 버튼은 교사 화면에서만 — 학생·학부모 딥링크(locked)에는 필요 없음 */}
+        {!locked&&<button onClick={()=>window.print()} style={{padding:"8px 16px",fontSize:12,fontWeight:600,background:RC.primary,color:"white",border:"none",borderRadius:8,cursor:"pointer",whiteSpace:"nowrap"}}>🖨 인쇄</button>}
       </div>
 
       {/* ── 정합성 경고 · 교사 화면 전용 (locked = 학생·학부모 딥링크에는 절대 안 뜸) ── */}
