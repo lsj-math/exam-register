@@ -2047,6 +2047,29 @@ function ReportTab({initialExamId,lockStudentId,onBack,readOnly}={}){
       return{name:k,rate:g?Math.round(o/g*100):0};
     }).sort((a,b2)=>a.rate-b2.rate);
 
+    /* ── 응시 인원 집계 ──
+       명단에 원장·강사 본인 계정이 학생처럼 한 줄 들어가 있는 경우가 있습니다.
+       반 이름에 강사 이름이 들어가므로(예: "[SNT] 중산고1 조창성&이승준")
+       그 이름과 같은 명단 항목은 인원 계산에서 뺍니다.
+       ⚠️ 뺀 사람이 있으면 화면에 그대로 적어 두어, 숫자가 조용히 달라지는 일이 없게 합니다. */
+    const teacherNames=((exam.class_name||"").replace(/\[[^\]]*\]/g," ").match(/[가-힣]{2,4}/g)||[]);
+    const isStaffRow=s=>teacherNames.includes(s.name);
+    const staffRows=students.filter(isStaffRow);
+    const roster=students.filter(s=>!isStaffRow(s));      // 실제 학생 명단
+    const takers=roster.filter(s=>results[s.id]);
+    const absent=roster.filter(s=>!results[s.id]);
+
+    /* ── 오답률 BEST 5 ──
+       이 반이 가장 많이 틀린 문항. 다음 수업에서 먼저 짚을 순서입니다.
+       채점이 끝난 답안만 분모에 넣습니다(서술형 미채점은 제외). */
+    const wrongTop=qs.map(q=>{
+      let wrong=0,graded=0;
+      allSwr.forEach(st2=>{const c=isCorrect(st2.id,q);if(c!=null){graded++;if(!c)wrong++}});
+      return{q,wrong,graded,rate:graded?Math.round(wrong/graded*100):0};
+    }).filter(x=>x.graded>0&&x.wrong>0)
+      .sort((a,b2)=>b2.rate-a.rate||a.q.question_no-b2.q.question_no)
+      .slice(0,5);
+
     const tile=(l,v,sub)=>(
       <div key={l} style={{background:"white",borderRadius:12,padding:"clamp(12px,3vw,16px) clamp(8px,2vw,14px)",textAlign:"center",border:`1px solid ${RC.border}`,minWidth:0}}>
         <div style={{fontSize:"clamp(9.5px,2.4vw,11px)",color:RC.accent,fontWeight:700,marginBottom:5}}>{l}</div>
@@ -2070,12 +2093,20 @@ function ReportTab({initialExamId,lockStudentId,onBack,readOnly}={}){
         <h2 style={{fontSize:"clamp(18px,4.6vw,24px)",fontWeight:800,color:RC.text,marginTop:3,marginBottom:4}}>반 전체 성적</h2>
         <div style={{fontSize:"clamp(10px,2.5vw,11.5px)",color:RC.sub,marginBottom:14}}>{exam.class_name} · 이름을 누르면 그 학생의 개인 분석지로 들어갑니다.</div>
 
-        <div className="stat-grid" data-n="4" style={{marginBottom:16}}>
-          {tile("응시",`${allSwr.length}명`)}
+        <div className="stat-grid" data-n="4" style={{marginBottom:absent.length||staffRows.length?8:16}}>
+          {tile("응시",`${takers.length}명`,absent.length?`명단 ${roster.length}명 중 · 미응시 ${absent.length}명`:`명단 ${roster.length}명 전원 응시`)}
           {tile("반 평균",`${clsAvg}점`,`만점 ${totalMax}점`)}
           {tile("최고점",`${maxScore}점`)}
           {tile("최저점",`${minScore}점`)}
         </div>
+
+        {(absent.length>0||staffRows.length>0)&&(
+          <div style={{fontSize:"clamp(9.5px,2.4vw,11px)",color:RC.sub,marginBottom:16,lineHeight:1.6}}>
+            {absent.length>0&&<span><b style={{color:"#B45309"}}>미응시 {absent.length}명</b> — {absent.map(s=>s.name).join(", ")}</span>}
+            {absent.length>0&&staffRows.length>0&&<span> · </span>}
+            {staffRows.length>0&&<span>명단 {students.length}명에서 선생님 계정({staffRows.map(s=>s.name).join(", ")})은 인원 계산에서 뺐습니다</span>}
+          </div>
+        )}
 
         {driftN>0&&!ro&&(
           <div style={{background:"#FEF2F2",border:"1.5px solid #FECACA",borderRadius:10,padding:"10px 14px",marginBottom:14,fontSize:12,color:"#B91C1C",fontWeight:700}}>
@@ -2114,6 +2145,37 @@ function ReportTab({initialExamId,lockStudentId,onBack,readOnly}={}){
             </table>
           </div>
         </div>
+
+        {/* 이 반이 가장 많이 틀린 문항 — 오답률 BEST 5 */}
+        {wrongTop.length>0&&(
+          <div style={{background:"white",borderRadius:12,border:`1px solid ${RC.border}`,padding:"clamp(14px,3.5vw,20px)",marginBottom:18}}>
+            <div style={{fontSize:11,color:RC.accent,fontWeight:700,letterSpacing:1}}>MOST MISSED</div>
+            <div style={{fontSize:"clamp(14px,3.6vw,17px)",fontWeight:800,color:RC.text,marginTop:3,marginBottom:4}}>오답률 BEST 5</div>
+            <div style={{fontSize:"clamp(9.5px,2.4vw,11px)",color:RC.sub,marginBottom:14}}>이 회차에서 가장 많이 틀린 문항입니다. 오답노트를 만드실 때 참고하세요</div>
+            {wrongTop.map((x,i)=>{
+              // 여기 올라온 문항은 전부 '틀린 문항'이라, 초록(=좋음)은 쓰지 않습니다
+              const col=x.rate>=70?"#B91C1C":x.rate>=50?"#C2410C":x.rate>=30?"#B45309":"#0369A1";
+              return(
+                <div key={x.q.question_no} style={{marginBottom:i<wrongTop.length-1?12:0}}>
+                  <div style={{display:"flex",alignItems:"baseline",gap:6,marginBottom:4,flexWrap:"wrap"}}>
+                    <span style={{fontSize:"clamp(10px,2.5vw,11px)",fontWeight:800,color:"white",background:col,borderRadius:5,padding:"1px 6px",whiteSpace:"nowrap"}}>{i+1}위</span>
+                    <span style={{fontSize:"clamp(12px,3vw,14px)",fontWeight:800,color:RC.text,whiteSpace:"nowrap"}}>{x.q.question_no}번</span>
+                    <span style={{fontSize:"clamp(9.5px,2.4vw,11px)",color:RC.sub,flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                      {x.q.sub_chapter||x.q.chapter||""}{x.q.topic?` · ${x.q.topic}`:""}
+                    </span>
+                    <span style={{fontSize:"clamp(11px,2.8vw,13px)",fontWeight:800,color:col,whiteSpace:"nowrap"}}>오답률 {x.rate}%</span>
+                  </div>
+                  <div style={{height:7,background:"#EFEAE4",borderRadius:4,overflow:"hidden"}}>
+                    <div style={{width:`${x.rate}%`,height:"100%",background:col,borderRadius:4}}/>
+                  </div>
+                  <div style={{fontSize:"clamp(8.5px,2.1vw,10px)",color:RC.sub,marginTop:3}}>
+                    {x.graded}명 중 <b style={{color:col}}>{x.wrong}명</b>이 틀림 · {x.q.question_type||""}{x.q.difficulty?` · 난이도 ${x.q.difficulty}`:""} · 배점 {x.q.score}점
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
 
         {/* 단원별 반 평균 정답률 */}
         <div style={{background:"white",borderRadius:12,border:`1px solid ${RC.border}`,padding:"clamp(14px,3.5vw,20px)"}}>
@@ -2516,7 +2578,7 @@ function App(){
       {!QS_VIEWER&&(tab==="register"||tab==="omr")&&<div className="no-print" style={{padding:"0 16px"}}><div style={{maxWidth:600,margin:"8px auto 0"}}><ApiKeyInput apiKey={apiKey} setApiKey={setApiKey}/></div></div>}
 
       {QS_VIEWER&&<div className="no-print" style={{margin:"10px 16px 0",background:"#EFF6FF",border:"1.5px solid #BFDBFE",color:"#1E40AF",borderRadius:10,padding:"10px 14px",fontSize:12,fontWeight:700,lineHeight:1.6}}>
-        👁 조회 전용으로 접속했습니다 — 성적과 분석지를 보실 수 있고, 문항 등록·채점·수정은 되지 않습니다.
+        👁 관리자 모드로 접속했습니다.
       </div>}
       {!QS_VIEWER&&tab==="register"&&<RegisterTab apiKey={apiKey}/>}
       {!QS_VIEWER&&tab==="omr"&&<OmrTab apiKey={apiKey}/>}
