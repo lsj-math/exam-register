@@ -192,6 +192,39 @@ function computeScore(qs,wrongQs,essayScoreOf){
 }
 // 맵({`${studentId}-${qno}`: 점수})에서 읽는 흔한 형태
 const essayFromMap=(map,studentId)=>q=>{const v=map[`${studentId}-${q.question_no}`];return v==null?null:v};
+/* ══════════════════════════════════════════════════════════════
+   서술형은 O/X가 아니라 '득점률'로 다룬다
+   ──────────────────────────────────────────────────────────────
+   선택형·단답형은 맞으면 1, 틀리면 0이지만 서술형은 부분점수라 그 사이 값이 나온다.
+   예전에는 화면의 ✓/✗를 wrong_questions(= 객관식만 들어가는 배열)로 그렸기 때문에
+   서술형은 무조건 ✓가 찍혔고, 같은 줄의 정답률은 '만점자 비율'이라 0%가 떴다.
+   "정답률 0% 인데 ✓" 라는 모순이 학부모 화면에 그대로 나갔던 원인이다.
+
+   앞으로 서술형 판정은 전부 이 함수 하나만 쓴다.
+     creditOf()  → 0~1 사이 득점률, 아직 채점 안 됐으면 null
+     ESSAY_PASS  → 이 이상이면 '개념은 잡혀 있다'고 보는 기준선
+                   (만점이 아니어도 4/6점이면 최우선 오답으로 올리지 않는다) */
+const ESSAY_PASS=0.6;
+function creditOf(q,wrongList,essayVal){
+  const t=q.question_type||q.type;
+  if(t==="서술형"){
+    if(essayVal==null)return null;                 // 미채점 — 0점으로 조용히 처리하지 않는다
+    const max=Number(q.score)||0;
+    if(max<=0)return 0;
+    return Math.max(0,Math.min(1,Number(essayVal)/max));
+  }
+  return (wrongList||[]).includes(q.question_no)?0:1;
+}
+// 부분점수 맵({`${studentId}-${qno}`: 점수})에서 바로 읽는 형태
+const creditFromMap=(map,studentId)=>(q,wrongList)=>
+  creditOf(q,wrongList,map[`${studentId}-${q.question_no}`]);
+// 득점률 → 화면 색 (미채점은 회색)
+const creditColor=c=>c==null?{bg:"#F1F5F9",text:"#94A3B8",bd:"#E2E8F0"}
+  :c>=1?{bg:"#F0FDF4",text:"#16A34A",bd:"#BBF7D0"}
+  :c>=ESSAY_PASS?{bg:"#F0F9FF",text:"#0369A1",bd:"#BAE6FD"}
+  :c>0?{bg:"#FFF7ED",text:"#C2410C",bd:"#FED7AA"}
+  :{bg:"#FEF2F2",text:"#DC2626",bd:"#FECACA"};
+
 // 화면에서 쓰는 details 배열([{no,type,score,partial_score}])로부터 같은 공식으로 계산
 function scoreFromDetails(details,wrong){
   const qs=(details||[]).map(d=>({question_no:d.no,question_type:d.type,score:d.score}));
@@ -1668,13 +1701,23 @@ function __hashStr(s){
   return h>>>0;
 }
 
-function genComment(score,avg,chScores,wq,qs,exam,stName,avgDiff,allRes,histData,studentId){
+function genComment(score,avg,chScores,wq,qs,exam,stName,avgDiff,allRes,histData,studentId,qCredits){
   const fn=stName.length>=3?stName.slice(1):stName;
   const sorted=[...chScores].sort((a,b)=>a.score-b.score);
   const weakCh=sorted.filter(c=>c.score<70);
   const strongCh=sorted.filter(c=>c.score>=80);
-  const correctQs=qs.filter(q=>!wq.includes(q.question_no));
-  const wrongQsList=qs.filter(q=>wq.includes(q.question_no));
+  /* 문항 분류는 득점률로 한다.
+     서술형을 wq(객관식 전용 배열)로 나누면 늘 '정답'에 들어가 코멘트가 사실과 어긋났다.
+       만점       → 정답으로 본다
+       0점        → 오답
+       그 사이     → '부분 실점'으로 따로 묶어 문장을 달리 쓴다
+       미채점     → 어느 쪽에도 넣지 않는다 */
+  const cr=q=>{const c=qCredits?qCredits[q.question_no]:undefined;
+    return c===undefined?((wq||[]).includes(q.question_no)?0:1):c};
+  const gradedQs=qs.filter(q=>cr(q)!=null);
+  const correctQs=gradedQs.filter(q=>cr(q)>=1);
+  const wrongQsList=gradedQs.filter(q=>cr(q)===0);
+  const partialQs=gradedQs.filter(q=>{const c=cr(q);return c>0&&c<1});
   const easyWrong=wrongQsList.filter(q=>["하","중하","중"].includes(q.difficulty));
   const hardCorrect=correctQs.filter(q=>["상","최상"].includes(q.difficulty));
   const hardWrong=wrongQsList.filter(q=>["상","최상"].includes(q.difficulty));
@@ -1808,24 +1851,24 @@ function genComment(score,avg,chScores,wq,qs,exam,stName,avgDiff,allRes,histData
   let s2="";
   if(strongCh.length>0&&hardCorrect.length>0){
     s2=V("a1",
-      `단원별로 살펴보면, ${chList(strongCh)} 영역에서 ${strongCh.map(c=>c.score+"%").join(", ")}의 정답률을 보이며 해당 파트의 학습이 충실하게 이루어져 있습니다. 특히 ${nos(hardCorrect)}번 같은 난이도 ${dl(hardCorrect[0].difficulty)} 문항까지 정확하게 처리한 점으로 보아, 단순 개념 이해를 넘어 응용 문제에 대한 접근력도 갖추어져 있는 것으로 판단됩니다.`,
+      `단원별로 살펴보면, ${chList(strongCh)} 영역에서 ${strongCh.map(c=>c.score+"%").join(", ")}의 성취도를 보이며 해당 파트의 학습이 충실하게 이루어져 있습니다. 특히 ${nos(hardCorrect)}번 같은 난이도 ${dl(hardCorrect[0].difficulty)} 문항까지 정확하게 처리한 점으로 보아, 단순 개념 이해를 넘어 응용 문제에 대한 접근력도 갖추어져 있는 것으로 판단됩니다.`,
       `강점부터 말씀드리면 ${chList(strongCh)} 단원이 각각 ${strongCh.map(c=>c.score+"%").join(", ")}로 안정적입니다. 여기에 ${nos(hardCorrect)}번 같은 난이도 ${dl(hardCorrect[0].difficulty)} 문항까지 해결했다는 점은, 개념을 외운 수준을 넘어 상황에 맞게 꺼내 쓸 수 있다는 의미입니다.`,
       `${chList(strongCh)} 파트가 ${strongCh.map(c=>c.score+"%").join(", ")}로 잘 잡혀 있습니다. 무엇보다 ${nos(hardCorrect)}번 등 난이도 ${dl(hardCorrect[0].difficulty)} 문항을 놓치지 않은 것이 인상적인데, 이는 낯선 문제 앞에서도 풀이의 실마리를 찾아낼 수 있다는 뜻입니다.`);
   }else if(strongCh.length>0){
     s2=V("a2",
-      `단원별로 살펴보면, ${chList(strongCh)} 영역에서 ${strongCh.map(c=>c.score+"%").join(", ")}의 정답률을 기록하고 있어 해당 파트의 기본 학습은 충실하게 이루어진 것으로 보입니다.`,
-      `${chList(strongCh)} 단원은 ${strongCh.map(c=>c.score+"%").join(", ")}의 정답률로 안정적입니다. 이 영역은 이미 확보된 구간이므로, 남은 시간은 다른 단원에 배분하는 편이 효율적입니다.`,
-      `강점 영역은 ${chList(strongCh)}이며 정답률은 ${strongCh.map(c=>c.score+"%").join(", ")}입니다. 기본 개념이 자리 잡은 단원이라, 여기서는 실수 관리만 유지해도 충분합니다.`);
+      `단원별로 살펴보면, ${chList(strongCh)} 영역에서 ${strongCh.map(c=>c.score+"%").join(", ")}의 성취도를 기록하고 있어 해당 파트의 기본 학습은 충실하게 이루어진 것으로 보입니다.`,
+      `${chList(strongCh)} 단원은 ${strongCh.map(c=>c.score+"%").join(", ")}의 성취도로 안정적입니다. 이 영역은 이미 확보된 구간이므로, 남은 시간은 다른 단원에 배분하는 편이 효율적입니다.`,
+      `강점 영역은 ${chList(strongCh)}이며 성취도는 ${strongCh.map(c=>c.score+"%").join(", ")}입니다. 기본 개념이 자리 잡은 단원이라, 여기서는 실수 관리만 유지해도 충분합니다.`);
   }else if(hardCorrect.length>0){
     s2=V("a3",
       `이번 시험에서 ${hardCorrect.map(q=>q.question_no+"번(난이도 "+dl(q.difficulty)+")").join(", ")} 문항을 정확히 풀어낸 점은 주목할 부분입니다. 해당 유형의 문제 해결 과정이 체화되어 있다는 의미이므로, 이 감각을 유지하면서 인접 단원으로 확장해 나가는 것이 중요합니다.`,
-      `단원별 정답률은 아직 고르지 않지만, ${nos(hardCorrect)}번 같은 고난도 문항을 맞힌 것은 분명한 신호입니다. 어려운 문제를 풀어낼 사고력은 있다는 뜻이므로, 기본 유형의 처리 속도만 안정되면 점수는 빠르게 따라옵니다.`,
+      `단원별 성취도는 아직 고르지 않지만, ${nos(hardCorrect)}번 같은 고난도 문항을 맞힌 것은 분명한 신호입니다. 어려운 문제를 풀어낼 사고력은 있다는 뜻이므로, 기본 유형의 처리 속도만 안정되면 점수는 빠르게 따라옵니다.`,
       `${nos(hardCorrect)}번 등 난이도가 높은 문항에서 정답을 기록했습니다. 이런 문항은 요령으로 맞히기 어려운 유형이라, 개념을 실제로 이해하고 있다는 근거로 볼 수 있습니다.`);
   }else if(correctQs.length>0){
     s2=V("a4",
-      `전체 ${qs.length}문항 중 ${correctQs.length}문항에서 정답을 기록하였으며, 기초적인 개념 이해는 확보되어 있는 상태입니다. 다만, 시험에서 안정적으로 득점하기 위해서는 정답률이 높은 단원의 완성도를 더 끌어올리는 작업이 병행되어야 합니다.`,
-      `${qs.length}문항 중 ${correctQs.length}문항을 맞혔습니다. 기본 개념은 잡혀 있으나 아직 단원별로 확실하게 자리 잡은 영역이 뚜렷하지 않아, 먼저 한 단원을 끝까지 완성해 성공 경험을 만드는 방식을 권합니다.`,
-      `총 ${qs.length}문항 가운데 ${correctQs.length}문항에서 정답이 나왔습니다. 개념의 큰 줄기는 이해하고 있는 단계이므로, 이제는 단원 하나를 정해 정답률을 확실히 끌어올리는 데 집중하는 것이 효과적입니다.`);
+      `전체 ${gradedQs.length}문항 중 ${correctQs.length}문항에서 정답을 기록하였으며, 기초적인 개념 이해는 확보되어 있는 상태입니다. 다만, 시험에서 안정적으로 득점하기 위해서는 정답률이 높은 단원의 완성도를 더 끌어올리는 작업이 병행되어야 합니다.`,
+      `${gradedQs.length}문항 중 ${correctQs.length}문항을 맞혔습니다. 기본 개념은 잡혀 있으나 아직 단원별로 확실하게 자리 잡은 영역이 뚜렷하지 않아, 먼저 한 단원을 끝까지 완성해 성공 경험을 만드는 방식을 권합니다.`,
+      `총 ${gradedQs.length}문항 가운데 ${correctQs.length}문항에서 정답이 나왔습니다. 개념의 큰 줄기는 이해하고 있는 단계이므로, 이제는 단원 하나를 정해 정답률을 확실히 끌어올리는 데 집중하는 것이 효과적입니다.`);
   }
   if(s2)p.push(s2);
 
@@ -1855,11 +1898,31 @@ function genComment(score,avg,chScores,wq,qs,exam,stName,avgDiff,allRes,histData
     }
     if(weakCh.length>0){
       s3+=V("w1",
-        ` 단원 단위로 보면 ${weakCh.map(c=>c.name+"(정답률 "+c.score+"%)").join(", ")} 파트의 정답률이 상대적으로 낮게 나타나고 있어, 이 단원의 핵심 개념과 대표 출제 유형을 중심으로 한 집중 복습이 필요합니다.`,
-        ` 단원별로는 ${weakCh.map(c=>c.name+"(정답률 "+c.score+"%)").join(", ")}가 약한 축에 속합니다. 범위를 넓히기보다 이 단원들의 대표 유형부터 확실히 정리하는 순서를 권합니다.`,
+        ` 단원 단위로 보면 ${weakCh.map(c=>c.name+"(성취도 "+c.score+"%)").join(", ")} 파트의 성취도가 상대적으로 낮게 나타나고 있어, 이 단원의 핵심 개념과 대표 출제 유형을 중심으로 한 집중 복습이 필요합니다.`,
+        ` 단원별로는 ${weakCh.map(c=>c.name+"(성취도 "+c.score+"%)").join(", ")}가 약한 축에 속합니다. 범위를 넓히기보다 이 단원들의 대표 유형부터 확실히 정리하는 순서를 권합니다.`,
         ` 취약 단원은 ${weakCh.map(c=>c.name+"("+c.score+"%)").join(", ")}로 확인됩니다. 다음 회차 전까지 이 단원을 우선순위에 두고 복습 분량을 배정하겠습니다.`);
     }
     if(s3)p.push(s3);
+  }
+
+  /* ══ 문단 4-b. 서술형 부분 실점 ══
+     "틀렸다"가 아니라 "어디까지 갔는지"를 말해 주는 문단.
+     서술형은 답이 맞고 틀리고보다 풀이가 어디서 끊겼는지가 정보량이 크다. */
+  if(partialQs.length>0){
+    const pl=partialQs.map(q=>{
+      const g=Math.round(Number(q.score)*cr(q)*10)/10;
+      return `${q.question_no}번(${g}/${q.score}점)`;
+    }).join(", ");
+    const near=partialQs.filter(q=>cr(q)>=ESSAY_PASS).length;
+    p.push(near===partialQs.length
+      ? V("e1",
+          `서술형 ${pl}은 부분점수로 채점되었습니다. 배점의 절반 이상을 확보한 만큼 접근 방향과 핵심 개념은 잡혀 있으며, 감점은 마지막 서술 단계에서 발생했습니다. 결론까지 문장으로 마무리하는 연습을 더하면 만점 답안으로 이어질 수 있는 구간입니다.`,
+          `서술형에서는 ${pl}을 받았습니다. 풀이의 큰 줄기는 맞게 세웠고 마무리 서술에서 점수가 깎인 형태라, 답을 구한 뒤 근거를 한 문장으로 정리하는 습관만 붙이면 채워지는 부분입니다.`,
+          `${pl}으로 서술형 부분점수가 나왔습니다. 개념을 몰라서 못 쓴 것이 아니라 서술이 중간에 끊긴 경우이므로, 수업에서 답안을 끝까지 적어보는 훈련을 함께 진행하겠습니다.`)
+      : V("e2",
+          `서술형 ${pl}은 부분점수로 채점되었습니다. 배점의 절반에 못 미치는 문항이 있어, 풀이 초반의 조건 정리 단계부터 다시 짚어볼 필요가 있습니다. 서술형은 답만 맞히는 연습으로는 점수가 오르지 않아, 과정 서술 자체를 훈련 대상으로 삼겠습니다.`,
+          `서술형은 ${pl}입니다. 방향은 잡았으나 중간에서 논리가 끊긴 형태라, 정답 확인보다 풀이를 처음부터 다시 써 보는 작업이 필요합니다.`,
+          `${pl}으로 서술형에서 실점이 있었습니다. 부분점수가 나왔다는 것은 접근은 했다는 뜻이므로, 어디서 막혔는지 함께 확인하며 답안 구성 방식을 잡아가겠습니다.`));
   }
 
   // ══ 문단 5. 단원별 변화 + 향후 계획 ══
@@ -1887,11 +1950,14 @@ function genComment(score,avg,chScores,wq,qs,exam,stName,avgDiff,allRes,histData
         `한편 ${declined.map(c=>c.name+"("+c.from+"% → "+c.to+"%)").join(", ")}는 이전보다 정답률이 내려갔습니다. 한동안 다루지 않아 감이 떨어졌을 가능성이 있어 재점검하겠습니다. `);
     }
   }
-  if(wrongQsList.length>0){
+  // 다시 다룰 문항 = 완전 오답 + 배점의 60%에 못 미친 서술형
+  const reviewQs=[...wrongQsList,...partialQs.filter(q=>cr(q)<ESSAY_PASS)]
+    .sort((a,b)=>a.question_no-b.question_no);
+  if(reviewQs.length>0){
     s4+=V("p1",
-      `다음 수업에서는 이번 시험의 오답 문항(${nos(wrongQsList)}번)에 대한 풀이 점검을 우선적으로 진행할 예정입니다.`,
-      `다음 수업은 이번 회차 오답(${nos(wrongQsList)}번) 정리부터 시작하겠습니다.`,
-      `다가오는 수업에서 ${nos(wrongQsList)}번 문항을 함께 다시 풀어보며 막힌 지점을 짚을 계획입니다.`);
+      `다음 수업에서는 이번 시험의 오답 문항(${nos(reviewQs)}번)에 대한 풀이 점검을 우선적으로 진행할 예정입니다.`,
+      `다음 수업은 이번 회차 오답(${nos(reviewQs)}번) 정리부터 시작하겠습니다.`,
+      `다가오는 수업에서 ${nos(reviewQs)}번 문항을 함께 다시 풀어보며 막힌 지점을 짚을 계획입니다.`);
     if(weakCh.length>0){
       s4+=V("p2",
         ` ${chList(weakCh)} 단원은 유사 유형의 문항을 추가로 배정하여, 같은 유형에서 반복적으로 실수가 발생하지 않도록 훈련할 계획입니다.`,
@@ -2006,24 +2072,26 @@ function ReportTab({initialExamId,lockStudentId,onBack,readOnly}={}){
      ══════════════════════════════════════════════════════════════ */
   if(step==="summary"&&!locked){
     const chKeys=[...new Set(qs.map(q=>q.sub_chapter||q.chapter))];
-    const isCorrect=(sid,q)=>{
-      const w=(results[sid]||{}).wrong_questions||[];
-      if(q.question_type==="서술형"){
-        const v=subScores[`${sid}-${q.question_no}`];
-        return v==null?null:Number(v)>=Number(q.score);
-      }
-      return !w.includes(q.question_no);
+    /* 서술형은 O/X가 아니라 득점률(0~1)로 본다. 미채점은 null.
+       예전에는 '부분점수 ≥ 배점'만 정답으로 세어, 5/6점을 받은 답안이
+       0점 답안과 똑같이 오답으로 집계됐다. */
+    const creditAt=(sid,q)=>creditOf(q,(results[sid]||{}).wrong_questions||[],subScores[`${sid}-${q.question_no}`]);
+    const isCorrect=(sid,q)=>{const c=creditAt(sid,q);return c==null?null:c>=(q.question_type==="서술형"?ESSAY_PASS:1)};
+    // 배점 가중 득점률(%) — 단원별 지표용
+    const creditRate=(sid,list)=>{
+      let got=0,max=0;
+      list.forEach(q=>{const c=creditAt(sid,q);if(c==null)return;const sc=Number(q.score)||0;max+=sc;got+=sc*c});
+      return max?Math.round(got/max*100):null;
     };
     const rows=allSwr.map(st2=>{
       const w=(results[st2.id]||{}).wrong_questions||[];
       const b=computeScore(qs,w,essayFromMap(subScores,st2.id));
       let ok=0,graded=0;
       qs.forEach(q=>{const c=isCorrect(st2.id,q);if(c!=null){graded++;if(c)ok++}});
-      const chRate=chKeys.map(k=>{
-        const list=qs.filter(q=>(q.sub_chapter||q.chapter)===k);
-        let o=0,g=0;list.forEach(q=>{const c=isCorrect(st2.id,q);if(c!=null){g++;if(c)o++}});
-        return{name:k,rate:g?Math.round(o/g*100):null};
-      });
+      const chRate=chKeys.map(k=>({
+        name:k,
+        rate:creditRate(st2.id,qs.filter(q=>(q.sub_chapter||q.chapter)===k))
+      }));
       const weak=chRate.filter(x=>x.rate!=null&&x.rate<70).sort((a,b2)=>a.rate-b2.rate).slice(0,2);
       const res2=results[st2.id]||{};
       return{st:st2,score:b.total,ok,graded,chRate,weak,
@@ -2042,9 +2110,8 @@ function ReportTab({initialExamId,lockStudentId,onBack,readOnly}={}){
     // 단원별 반 평균 정답률
     const chAvg=chKeys.map(k=>{
       const list=qs.filter(q=>(q.sub_chapter||q.chapter)===k);
-      let o=0,g=0;
-      allSwr.forEach(st2=>list.forEach(q=>{const c=isCorrect(st2.id,q);if(c!=null){g++;if(c)o++}}));
-      return{name:k,rate:g?Math.round(o/g*100):0};
+      const rates=allSwr.map(st2=>creditRate(st2.id,list)).filter(x=>x!=null);
+      return{name:k,rate:rates.length?Math.round(rates.reduce((a,b2)=>a+b2,0)/rates.length):0};
     }).sort((a,b2)=>a.rate-b2.rate);
 
     /* ── 응시 인원 집계 ──
@@ -2063,10 +2130,16 @@ function ReportTab({initialExamId,lockStudentId,onBack,readOnly}={}){
        이 반이 가장 많이 틀린 문항. 다음 수업에서 먼저 짚을 순서입니다.
        채점이 끝난 답안만 분모에 넣습니다(서술형 미채점은 제외). */
     const wrongTop=qs.map(q=>{
-      let wrong=0,graded=0;
-      allSwr.forEach(st2=>{const c=isCorrect(st2.id,q);if(c!=null){graded++;if(!c)wrong++}});
-      return{q,wrong,graded,rate:graded?Math.round(wrong/graded*100):0};
-    }).filter(x=>x.graded>0&&x.wrong>0)
+      // 서술형은 '틀린 사람 수'가 아니라 반 전체 실점률(1 − 평균 득점률)로 본다
+      let lost=0,graded=0,wrong=0;
+      allSwr.forEach(st2=>{
+        const c=creditAt(st2.id,q);
+        if(c==null)return;
+        graded++;lost+=(1-c);
+        if(c<(q.question_type==="서술형"?ESSAY_PASS:1))wrong++;
+      });
+      return{q,wrong,graded,rate:graded?Math.round(lost/graded*100):0};
+    }).filter(x=>x.graded>0&&x.rate>0)
       .sort((a,b2)=>b2.rate-a.rate||a.q.question_no-b2.q.question_no)
       .slice(0,5);
 
@@ -2163,13 +2236,16 @@ function ReportTab({initialExamId,lockStudentId,onBack,readOnly}={}){
                     <span style={{fontSize:"clamp(9.5px,2.4vw,11px)",color:RC.sub,flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
                       {x.q.sub_chapter||x.q.chapter||""}{x.q.topic?` · ${x.q.topic}`:""}
                     </span>
-                    <span style={{fontSize:"clamp(11px,2.8vw,13px)",fontWeight:800,color:col,whiteSpace:"nowrap"}}>오답률 {x.rate}%</span>
+                    <span style={{fontSize:"clamp(11px,2.8vw,13px)",fontWeight:800,color:col,whiteSpace:"nowrap"}}>{x.q.question_type==="서술형"?"실점률":"오답률"} {x.rate}%</span>
                   </div>
                   <div style={{height:7,background:"#EFEAE4",borderRadius:4,overflow:"hidden"}}>
                     <div style={{width:`${x.rate}%`,height:"100%",background:col,borderRadius:4}}/>
                   </div>
                   <div style={{fontSize:"clamp(8.5px,2.1vw,10px)",color:RC.sub,marginTop:3}}>
-                    {x.graded}명 중 <b style={{color:col}}>{x.wrong}명</b>이 틀림 · {x.q.question_type||""}{x.q.difficulty?` · 난이도 ${x.q.difficulty}`:""} · 배점 {x.q.score}점
+                    {x.q.question_type==="서술형"
+                      ? <>{x.graded}명 평균 <b style={{color:col}}>{r1(Number(x.q.score)*(100-x.rate)/100)}점</b> 획득 · 배점의 60% 미만 {x.wrong}명</>
+                      : <>{x.graded}명 중 <b style={{color:col}}>{x.wrong}명</b>이 틀림</>}
+                    {" · "}{x.q.question_type||""}{x.q.difficulty?` · 난이도 ${x.q.difficulty}`:""} · 배점 {x.q.score}점
                   </div>
                 </div>
               );
@@ -2226,10 +2302,11 @@ function ReportTab({initialExamId,lockStudentId,onBack,readOnly}={}){
   const qWrongCounts={};qs.forEach(q=>qWrongCounts[q.question_no]=0);allRes.forEach(r=>{(r.wrong_questions||[]).forEach(w=>{if(qWrongCounts[w]!=null)qWrongCounts[w]++})});
   const hardestQs=[...qs].sort((a,b)=>{const c=qWrongCounts[b.question_no]-qWrongCounts[a.question_no];return c!==0?c:(diffWeight[b.difficulty]||0)-(diffWeight[a.difficulty]||0)}).slice(0,3);
 
-  /* ── 문항별 '반 정답률' ──
-     선택형·단답형 : wrong_questions 에 들어 있지 않은 학생 = 정답
-     서술형        : wrong_questions 로는 알 수 없으므로 exam_subjective 의
-                     부분점수가 배점 이상인 학생을 정답으로 본다.
+  /* ── 문항별 반 지표 ──
+     선택형·단답형 : wrong_questions 에 들어 있지 않은 학생 = 정답 → '정답률'
+     서술형        : 만점자 비율이 아니라 '반 평균 득점률'을 쓴다.
+                     (만점자 비율은 부분점수 문항에서 늘 0~10%로 찍혀
+                      학부모에게 문항이 잘못된 것처럼 보였다)
                      아직 채점 안 된 서술형은 null(표시는 '—')로 남긴다.  */
   const takerCount=allRes.length;
   const subByQ={};
@@ -2243,13 +2320,20 @@ function ReportTab({initialExamId,lockStudentId,onBack,readOnly}={}){
     if(q.question_type==="서술형"){
       const rows=subByQ[String(q.question_no)]||[];
       if(!rows.length)return null;                       // 미채점
-      const ok=rows.filter(x=>Number(x.v)>=Number(q.score)).length;
-      return Math.round((ok/rows.length)*100);
+      const max=Number(q.score)||0;
+      if(max<=0)return null;
+      const sum=rows.reduce((s,x)=>s+Math.max(0,Math.min(1,Number(x.v)/max)),0);
+      return Math.round((sum/rows.length)*100);          // 반 평균 득점률
     }
     if(!takerCount)return null;
     return Math.round(((takerCount-(qWrongCounts[q.question_no]||0))/takerCount)*100);
   };
   const qRates={};qs.forEach(q=>{qRates[q.question_no]=rateOf(q)});
+  // 서술형은 같은 숫자라도 뜻이 다르므로 라벨을 구분해서 붙인다
+  const rateLabel=q=>q.question_type==="서술형"?"반 평균":"정답률";
+  // 이 학생의 문항별 득점률 (0~1, 미채점이면 null)
+  const myCredit=creditFromMap(subScores,st.id);
+  const qCredits={};qs.forEach(q=>{qCredits[q.question_no]=myCredit(q,wq)});
   const rateColor=r=>r==null?{bg:"#F5F5F5",text:"#999"}
     :r>=80?{bg:"#F0FDF4",text:"#15803D"}
     :r>=60?{bg:"#F0F9FF",text:"#0369A1"}
@@ -2261,11 +2345,10 @@ function ReportTab({initialExamId,lockStudentId,onBack,readOnly}={}){
      "남들은 다 맞혔는데 나만 틀린 문항" = 가장 먼저 메워야 할 구멍.        */
   const priorityPool=qs
     .filter(q=>{
-      if(q.question_type==="서술형"){
-        const v=subScores[`${st.id}-${q.question_no}`];
-        return v!=null&&Number(v)<Number(q.score);       // 부분점수가 배점 미만이면 오답 취급
-      }
-      return wq.includes(q.question_no);
+      const c=qCredits[q.question_no];
+      if(c==null)return false;                          // 미채점은 우선순위에 올리지 않는다
+      if(q.question_type==="서술형")return c<ESSAY_PASS; // 5.5/6점을 '최우선 오답'으로 올리지 않기 위함
+      return c===0;
     })
     .map(q=>({q,rate:qRates[q.question_no]}))
     .filter(x=>x.rate!=null)
@@ -2285,9 +2368,29 @@ function ReportTab({initialExamId,lockStudentId,onBack,readOnly}={}){
   // 중단원(sub_chapter) 기준으로 그룹핑 — 대단원은 범위가 넓어 시각적 의미가 떨어짐
   const chMap={};qs.forEach(q=>{const key=q.sub_chapter||q.chapter;if(!chMap[key])chMap[key]=[];chMap[key].push(q)});
   const chEntries=Object.entries(chMap);
-  const chScores=chEntries.map(([name,qList])=>{const correct=qList.filter(q=>!wq.includes(q.question_no)).length;return{name,score:Math.round((correct/qList.length)*100),total:qList.length,correct}});
-  const avgScores=chEntries.map(([,qList])=>{const rates=allRes.map(r=>{const w=r.wrong_questions||[];return Math.round((qList.filter(q=>!w.includes(q.question_no)).length/qList.length)*100)});return rates.length?Math.round(rates.reduce((a,b)=>a+b,0)/rates.length):0});
-  const comments=genComment(score,avg,chScores,wq,qs,exam,st.name,avgDiff,allRes,histData,st.id);
+  /* 단원별 성취도는 '맞힌 문항 수'가 아니라 '배점 대비 득점'으로 계산한다.
+     문항 수로 세면 서술형이 늘 정답으로 잡혀(= wrong_questions 에 없어서)
+     레이더가 실제보다 부풀려졌다. 객관식은 0/1이라 결과가 같고 서술형만 소수로 들어간다.
+     아직 채점 안 된 서술형은 분자·분모 양쪽에서 뺀다. */
+  const chCredit=(qList,creditFn,wrongList)=>{
+    let got=0,max=0,graded=0;
+    qList.forEach(q=>{
+      const c=creditFn(q,wrongList);
+      if(c==null)return;
+      const sc=Number(q.score)||0;
+      max+=sc;got+=sc*c;graded++;
+    });
+    return{pct:max?Math.round(got/max*100):0,got:r1(got),max:r1(max),graded};
+  };
+  const chScores=chEntries.map(([name,qList])=>{
+    const b=chCredit(qList,myCredit,wq);
+    return{name,score:b.pct,total:qList.length,got:b.got,max:b.max,graded:b.graded};
+  });
+  const avgScores=chEntries.map(([,qList])=>{
+    const rates=allRes.map(r=>chCredit(qList,creditFromMap(subScores,r.student_id),r.wrong_questions||[]).pct);
+    return rates.length?Math.round(rates.reduce((a,b)=>a+b,0)/rates.length):0;
+  });
+  const comments=genComment(score,avg,chScores,wq,qs,exam,st.name,avgDiff,allRes,histData,st.id,qCredits);
 
   return(
     <div className="report-wrap" style={{maxWidth:760,margin:"0 auto",background:RC.light,minHeight:"100vh"}}>
@@ -2311,6 +2414,20 @@ function ReportTab({initialExamId,lockStudentId,onBack,readOnly}={}){
         {/* 인쇄 버튼은 교사 화면에서만 — 학생·학부모 딥링크(locked)·조회 전용에는 표시 안 함 */}
         {!locked&&!ro&&<button onClick={()=>window.print()} style={{padding:"8px 16px",fontSize:12,fontWeight:600,background:RC.primary,color:"white",border:"none",borderRadius:8,cursor:"pointer",whiteSpace:"nowrap"}}>🖨 인쇄</button>}
       </div>
+
+      {/* ── 서술형 채점 중 알림 · 모든 화면 (학생·학부모 포함) ──
+           총점이 잠정치라는 사실을 숨기면 나중에 점수가 올라갔을 때
+           "왜 말이 달라지느냐"는 문의가 생긴다. 처음부터 밝혀 둔다. */}
+      {!breakdown.essayDone&&(
+        <div style={{margin:"12px clamp(10px,3vw,20px) 0",background:"#FFFBEB",border:"1.5px solid #FDE68A",borderRadius:10,padding:"11px 14px",display:"flex",gap:10,alignItems:"flex-start"}}>
+          <span style={{fontSize:15,lineHeight:1.2}}>✏️</span>
+          <div style={{fontSize:"clamp(11px,2.8vw,12.5px)",color:"#92400E",lineHeight:1.7}}>
+            <b>서술형 {breakdown.essayMissing.join(", ")}번은 아직 채점 중입니다.</b><br/>
+            아래 <b>{score}점</b>은 채점이 끝난 문항({r1(breakdown.max-breakdown.essayMissing.reduce((s,n)=>{const q=qs.find(x=>x.question_no===n);return s+(Number(q&&q.score)||0)},0))}점 만점)까지만 반영한 <b>잠정 점수</b>이며,
+            서술형 채점이 끝나면 최종 점수로 갱신됩니다. 미채점 문항은 0점 처리하지 않았습니다.
+          </div>
+        </div>
+      )}
 
       {/* ── 정합성 경고 · 교사 화면 전용 (locked = 학생·학부모 딥링크에는 절대 안 뜸) ── */}
       {!locked&&!ro&&(drift||breakdown.unknown.length>0||!breakdown.essayDone)&&(
@@ -2379,7 +2496,7 @@ function ReportTab({initialExamId,lockStudentId,onBack,readOnly}={}){
             {chScores.map(ch=><div key={ch.name} style={{textAlign:"center",minWidth:64,maxWidth:110}}>
               <div style={{fontSize:"clamp(11px,2.8vw,13px)",fontWeight:700,color:RC.text,lineHeight:1.35,wordBreak:"keep-all"}}>{ch.name}</div>
               <div style={{fontSize:"clamp(17px,4.6vw,22px)",fontWeight:800,color:RC.accent,margin:"2px 0"}}>{ch.score}%</div>
-              <div style={{fontSize:"clamp(9.5px,2.3vw,11px)",color:RC.sub}}>{ch.correct}/{ch.total} 정답</div>
+              <div style={{fontSize:"clamp(9.5px,2.3vw,11px)",color:RC.sub}}>{ch.got}/{ch.max}점</div>
             </div>)}
           </div>
         </div>
@@ -2419,20 +2536,36 @@ function ReportTab({initialExamId,lockStudentId,onBack,readOnly}={}){
         <div className="page-break" style={{marginTop:24}}>
           <div style={{fontSize:11,color:RC.accent,fontWeight:700,letterSpacing:1}}>FULL RESULTS</div>
           <h2 style={{fontSize:"clamp(16px,4.4vw,22px)",fontWeight:800,color:RC.text,marginTop:4,marginBottom:4}}>전체 문항 결과</h2>
-          <div style={{fontSize:"clamp(9.5px,2.4vw,11px)",color:RC.sub,marginBottom:14}}>
-            가운데 <b style={{color:RC.text}}>%</b>는 이 문항을 맞힌 <b style={{color:RC.text}}>반 전체 학생 비율</b>입니다.
+          <div style={{fontSize:"clamp(9.5px,2.4vw,11px)",color:RC.sub,marginBottom:14,lineHeight:1.7}}>
+            가운데 <b style={{color:RC.text}}>정답률</b>은 이 문항을 맞힌 <b style={{color:RC.text}}>반 전체 학생 비율</b>입니다.<br/>
+            서술형은 부분점수로 채점하므로 O·X 대신 <b style={{color:RC.text}}>받은 점수</b>를 적었고,
+            가운데 값도 <b style={{color:RC.text}}>반 평균 득점률</b>로 표시했습니다.
           </div>
-          {qs.map(q=>{const isW=wq.includes(q.question_no),dc=diffMap[q.difficulty]||{bg:"#F5F5F5",text:"#666"};
-            return<div key={q.question_no} style={{display:"flex",alignItems:"center",gap:"clamp(7px,2vw,12px)",padding:"11px clamp(9px,2.6vw,14px)",background:"white",borderRadius:10,marginBottom:6,border:`1px solid ${isW?"#FECACA":RC.border}`}}>
-              <div style={{width:32,height:32,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",background:isW?"#FEE2E2":"#F0FDF4",color:isW?"#DC2626":"#16A34A",fontWeight:800,fontSize:14}}>{q.question_no}</div>
-              <div style={{flex:1,minWidth:0}}><div style={{fontSize:"clamp(11.5px,2.9vw,13px)",fontWeight:600,color:RC.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{q.topic}</div><div style={{fontSize:"clamp(9.5px,2.3vw,11px)",color:RC.sub,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{q.chapter} · {q.score}점</div></div>
-              {/* 반 정답률 — 유형과 난이도 사이 */}
+          {qs.map(q=>{
+            const dc=diffMap[q.difficulty]||{bg:"#F5F5F5",text:"#666"};
+            const isEssay=q.question_type==="서술형";
+            const cr=qCredits[q.question_no];                     // 0~1 · 미채점이면 null
+            const cc=creditColor(cr);
+            const got=isEssay&&cr!=null?r1(Number(q.score)*cr):null;
+            return<div key={q.question_no} style={{display:"flex",alignItems:"center",gap:"clamp(7px,2vw,12px)",padding:"11px clamp(9px,2.6vw,14px)",background:"white",borderRadius:10,marginBottom:6,border:`1px solid ${cc.bd}`}}>
+              <div style={{width:32,height:32,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",background:cc.bg,color:cc.text,fontWeight:800,fontSize:14,flexShrink:0}}>{q.question_no}</div>
+              <div style={{flex:1,minWidth:0}}><div style={{fontSize:"clamp(11.5px,2.9vw,13px)",fontWeight:600,color:RC.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{q.topic}</div><div style={{fontSize:"clamp(9.5px,2.3vw,11px)",color:RC.sub,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{q.chapter} · {q.score}점{isEssay?" · 서술형":""}</div></div>
+              {/* 반 지표 — 선택형·단답형은 정답률, 서술형은 반 평균 득점률 */}
               {(()=>{const rr=qRates[q.question_no],rc=rateColor(rr);
-                return<span title="이 문항을 맞힌 반 전체 학생 비율" style={{fontSize:"clamp(9.5px,2.4vw,11px)",fontWeight:800,padding:"3px 7px",borderRadius:7,background:rc.bg,color:rc.text,flexShrink:0,whiteSpace:"nowrap"}}>
-                  <span style={{fontSize:"0.76em",fontWeight:700,opacity:0.72,marginRight:3}}>정답률</span>{rr==null?"—":`${rr}%`}
+                return<span title={isEssay?"반 전체가 이 문항에서 배점 대비 평균 몇 %를 받았는지":"이 문항을 맞힌 반 전체 학생 비율"} style={{fontSize:"clamp(9.5px,2.4vw,11px)",fontWeight:800,padding:"3px 7px",borderRadius:7,background:rc.bg,color:rc.text,flexShrink:0,whiteSpace:"nowrap"}}>
+                  <span style={{fontSize:"0.76em",fontWeight:700,opacity:0.72,marginRight:3}}>{rateLabel(q)}</span>{rr==null?"—":`${rr}%`}
                 </span>;})()}
               <span style={{fontSize:10,padding:"3px 10px",borderRadius:20,background:dc.bg,color:dc.text,fontWeight:600,flexShrink:0}}>{q.difficulty}</span>
-              <span style={{fontSize:16,fontWeight:800,width:22,textAlign:"center",color:isW?"#EF4444":"#22C55E"}}>{isW?"✗":"✓"}</span>
+              {/* 결과 — 객관식은 O·X, 서술형은 받은 점수 */}
+              {isEssay?(
+                cr==null
+                  ? <span title="아직 채점 중입니다" style={{fontSize:"clamp(9px,2.3vw,10.5px)",fontWeight:800,minWidth:52,textAlign:"center",padding:"4px 6px",borderRadius:7,background:cc.bg,color:cc.text,flexShrink:0,whiteSpace:"nowrap"}}>미채점</span>
+                  : <span title={`부분점수 ${got}점 / 배점 ${q.score}점`} style={{fontSize:"clamp(10px,2.6vw,12px)",fontWeight:800,minWidth:52,textAlign:"center",padding:"4px 6px",borderRadius:7,background:cc.bg,color:cc.text,flexShrink:0,whiteSpace:"nowrap"}}>
+                      {got}<span style={{opacity:0.6,fontWeight:700}}>/{q.score}</span>
+                    </span>
+              ):(
+                <span style={{fontSize:16,fontWeight:800,minWidth:52,textAlign:"center",color:cr===0?"#EF4444":"#22C55E",flexShrink:0}}>{cr===0?"✗":"✓"}</span>
+              )}
             </div>;
           })}
         </div>
